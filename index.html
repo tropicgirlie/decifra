@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Decifra | Interprete seus exames de sangue com contexto feminino</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#8B1A4A"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Decifra"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png"/>
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png"/>
+
+  <!-- SEO / OG -->
+  <meta name="description" content="Envie seu exame laboratorial feminino e receba uma interpretação clara, com contexto de ciclo, climatério e fertilidade. Extração rigorosa. Nada inventado, nada armazenado."/>
+  <meta property="og:title" content="Decifra"/>
+  <meta property="og:description" content="Seus exames, decodificados para ela. Contexto clínico feminino para cada marcador. Extração rigorosa. Nada armazenado."/>
+  <meta property="og:type" content="website"/>
+  <link rel="canonical" href="https://decifra.com.br/"/>
+  <meta property="og:url" content="https://decifra.com.br"/>
+  <meta property="og:image" content="https://decifra.com.br/og.png"/>
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+  <meta property="og:image:alt" content="Decifra. Seus exames, decodificados para ela."/>
+  <meta property="og:site_name" content="Decifra"/>
+  <meta property="og:locale" content="pt_BR"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Decifra"/>
+  <meta name="twitter:description" content="Seus exames, decodificados para ela. Contexto clínico feminino para cada marcador."/>
+  <meta name="twitter:image" content="https://decifra.com.br/og.png"/>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Decifra",
+      "url": "https://decifra.com.br/",
+      "logo": "https://decifra.com.br/icons/icon-512.png"
+    }
+  </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Decifra",
+      "url": "https://decifra.com.br/",
+      "inLanguage": "pt-BR",
+      "description": "Interpretação de exames laboratoriais femininos com contexto clínico para ciclo menstrual, fertilidade, climatério e menopausa."
+    }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    .mobile-page .device-lab { display: flex; flex-direction: column; gap: 48px; }
+    .mobile-page .device-group-h { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #8B1A4A; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #EAEAEA; }
+    .mobile-page .device-row { display: flex; gap: 24px; overflow-x: auto; padding-bottom: 24px; }
+    .mobile-page .device-frame { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .mobile-page .device-label { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7A7A85; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Pular para o conteúdo principal</a>
+  <div id="root"></div>
+
+  <!-- Config (gitignored — contém chaves de API, nunca comitado) -->
+  <script src="config.js" onerror="window.FEMDECODE_CONFIG={}"></script>
+
+  <!-- Supabase client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="android-frame.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async () => {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        } catch (err) {
+          console.warn("[Decifra SW] unregister failed:", err);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "functions": {
+    "api/extract.js":        { "memory": 512, "maxDuration": 60 },
+    "api/summary.js":        { "memory": 256, "maxDuration": 30 },
+    "api/checkout.js":       { "memory": 256, "maxDuration": 30 },
+    "api/verify-payment.js": { "memory": 256, "maxDuration": 30 },
+    "api/webhook.js":        { "memory": 256, "maxDuration": 30 }
+  },
+  "headers": [
+    {
+      "source": "/og.png",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/pcos-lab-interpretation", "destination": "/pcos-lab-interpretation.html" },
+    { "source": "/fertility-hormone-lab-results", "destination": "/fertility-hormone-lab-results.html" },
+    { "source": "/thyroid-labs-women", "destination": "/thyroid-labs-women.html" },
+    { "source": "/perimenopause-blood-tests", "destination": "/perimenopause-blood-tests.html" },
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ]
+}

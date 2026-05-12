@@ -1,0 +1,17 @@
+.DS_Store
+.claude/
+*.log
+config.js
+.vercel
+.env*.local
+og-temp-render.html
+
+# Illustration sources — keep ChatGPT export originals locally, only deploy the slug-named copies
+illustrations/*
+!illustrations/chip-*.png
+!illustrations/obs-*.png
+!illustrations/system-*.png
+!illustrations/snapshot-hero.png
+!illustrations/principles-hero.png
+!illustrations/loading-atlas.png
+!illustrations/dropzone-bg.png

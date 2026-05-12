@@ -1,0 +1,10 @@
+{
+  "name": "femdecode",
+  "private": true,
+  "description": "Decode web app — Vercel dev (static + /api). Prefer 127.0.0.1 if localhost opens another stack (e.g. Vite on 5173).",
+  "scripts": {
+    "local": "vercel dev --yes --listen 127.0.0.1:3000",
+    "open:local": "open http://127.0.0.1:3000",
+    "og": "node scripts/render-og.mjs"
+  }
+}
