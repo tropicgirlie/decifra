@@ -10,6 +10,11 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX = 25;
 const REQUEST_BUCKETS = new Map();
 
+/** Image input bounds. */
+const MAX_IMAGES_PER_REQUEST = 5;
+const MAX_IMAGE_BYTES_BASE64 = 7 * 1024 * 1024; // ~5 MB raw with base64 overhead
+const ALLOWED_IMAGE_MEDIA_TYPES = new Set(["image/jpeg", "image/png"]);
+
 function jsonHeaders(res, status) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
@@ -103,8 +108,9 @@ const SYSTEM_PROMPT = [
   "10. panel: melhor encaixe entre: fertile, pcos, endo, fertility, peri, meno, obstetric, thyroid, metabolic, cbc, lipids, liver, kidney, coagulation, other",
   "11. Se o mesmo marcador aparecer múltiplas vezes (ex.: coletas repetidas), retorne cada linha distinta como objeto separado.",
   "12. Retorne APENAS JSON válido, sem markdown, sem explicação.",
+  "13. Se a entrada for uma ou mais imagens (fotos do laudo), primeiro transcreva LITERALMENTE todo o texto visível no campo `ocr_text` da resposta, exatamente como aparece nas imagens (preservando cabeçalhos, quebras de linha, valores, unidades, faixas, acentuação e separador decimal). Em seguida extraia os marcadores conforme as regras acima. Cada `source_snippet` deve ser substring literal de `ocr_text`. Se as imagens não forem legíveis como laudo laboratorial, retorne markers: [] e use ocr_text para a transcrição do que conseguiu ler.",
   "",
-  'Formato de resposta: {"report_name":"string or null","collection_date":"ISO date or null","markers":[{"marker":"...","value":"...","unit":"...","reference_range":"...","status":"...","confidence":"high|medium|low","source_snippet":"trecho literal","female_context":"...","panel":"..."}]}',
+  'Formato de resposta: {"report_name":"string or null","collection_date":"ISO date or null","ocr_text":"string or null (obrigatório quando a entrada for imagem)","markers":[{"marker":"...","value":"...","unit":"...","reference_range":"...","status":"...","confidence":"high|medium|low","source_snippet":"trecho literal","female_context":"...","panel":"..."}]}',
 ].join("\n");
 
 function collapseWs(s) {
@@ -204,12 +210,16 @@ module.exports = async function handler(req, res) {
     return res.end(JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada no servidor" }));
   }
 
-  const { text } = req.body || {};
-  if (!text || typeof text !== "string") {
+  const { text, images } = req.body || {};
+  const hasText   = typeof text === "string" && text.length > 0;
+  const imagesArr = Array.isArray(images) ? images : [];
+  const hasImages = imagesArr.length > 0;
+
+  if (!hasText && !hasImages) {
     jsonHeaders(res, 400);
-    return res.end(JSON.stringify({ error: "Texto ausente no corpo da requisição" }));
+    return res.end(JSON.stringify({ error: "Envie text ou images no corpo da requisição" }));
   }
-  if (text.length > MAX_INPUT_CHARS) {
+  if (hasText && text.length > MAX_INPUT_CHARS) {
     jsonHeaders(res, 413);
     return res.end(
       JSON.stringify({
@@ -219,13 +229,58 @@ module.exports = async function handler(req, res) {
       })
     );
   }
+  if (hasImages) {
+    if (imagesArr.length > MAX_IMAGES_PER_REQUEST) {
+      jsonHeaders(res, 413);
+      return res.end(JSON.stringify({
+        error: "Máximo de imagens por requisição excedido",
+        max_images: MAX_IMAGES_PER_REQUEST,
+        received_images: imagesArr.length,
+      }));
+    }
+    for (let i = 0; i < imagesArr.length; i += 1) {
+      const img = imagesArr[i];
+      if (!img || typeof img.data !== "string" || typeof img.media_type !== "string") {
+        jsonHeaders(res, 400);
+        return res.end(JSON.stringify({ error: `Imagem ${i + 1} mal formada (precisa de campos data e media_type)` }));
+      }
+      if (!ALLOWED_IMAGE_MEDIA_TYPES.has(img.media_type)) {
+        jsonHeaders(res, 415);
+        return res.end(JSON.stringify({ error: `Imagem ${i + 1}: tipo ${img.media_type} não suportado. Use JPG ou PNG.` }));
+      }
+      if (img.data.length > MAX_IMAGE_BYTES_BASE64) {
+        jsonHeaders(res, 413);
+        return res.end(JSON.stringify({
+          error: `Imagem ${i + 1} muito grande. Reduza para no máximo ~5 MB.`,
+          max_bytes_base64: MAX_IMAGE_BYTES_BASE64,
+          received_bytes_base64: img.data.length,
+        }));
+      }
+    }
+  }
 
   const authHeader = req.headers["authorization"] || "";
   const token      = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const jwtPayload = verifyJWT(token, process.env.JWT_SECRET);
   const tier       = jwtPayload?.tier === "pro" ? "pro" : "free";
 
-  console.log(`[Decifra extract] tier=${tier} textLen=${text.length}`);
+  console.log(`[Decifra extract] tier=${tier} textLen=${hasText ? text.length : 0} images=${imagesArr.length}`);
+
+  // Build the user message: text-only path, image-only path, or image+text overlay.
+  const userContent = hasImages
+    ? [
+        ...imagesArr.map((img) => ({
+          type:   "image",
+          source: { type: "base64", media_type: img.media_type, data: img.data },
+        })),
+        {
+          type: "text",
+          text: hasText
+            ? "Extraia todos os biomarcadores destas imagens do laudo laboratorial brasileiro. Lembre da regra 13: comece pela transcrição literal em `ocr_text`, depois extraia os marcadores. Texto adicional fornecido pela usuária:\n\n<<<\n" + text + "\n>>>"
+            : "Extraia todos os biomarcadores destas imagens do laudo laboratorial brasileiro. Lembre da regra 13: comece pela transcrição literal em `ocr_text`, depois extraia os marcadores.",
+        },
+      ]
+    : "Extraia todos os biomarcadores deste laudo laboratorial brasileiro:\n\n<<<\n" + text + "\n>>>";
 
   try {
     const { status, text: body } = await httpsPost(
@@ -239,7 +294,7 @@ module.exports = async function handler(req, res) {
         model:      "claude-haiku-4-5-20251001",
         max_tokens: 8192,
         system:     SYSTEM_PROMPT,
-        messages:   [{ role: "user", content: "Extraia todos os biomarcadores deste laudo laboratorial brasileiro:\n\n<<<\n" + text + "\n>>>" }],
+        messages:   [{ role: "user", content: userContent }],
       }
     );
 
@@ -264,10 +319,21 @@ module.exports = async function handler(req, res) {
       return res.end(JSON.stringify({ error: "Modelo retornou JSON inválido", raw: content.slice(0, 300) }));
     }
 
+    // Grounding source: text from request for paste/PDF flow; model's own ocr_text for image flow.
+    // Image flow trusts the model to transcribe literally; grounding then guards against
+    // markers fabricated outside what the OCR captured.
+    const sourceForGrounding = hasImages
+      ? (typeof parsed.ocr_text === "string" ? parsed.ocr_text : "")
+      : text;
+
+    if (hasImages && !sourceForGrounding) {
+      console.warn("[Decifra extract] Image flow returned no ocr_text; markers cannot be grounded.");
+    }
+
     // ── Validação rígida: descarta alucinações (modelo + trecho + valor precisam concordar) ──
     const markersBefore = (parsed.markers || []).length;
     parsed.markers = (parsed.markers || []).filter((m) => {
-      if (isMarkerGroundedInSource(m, text)) return true;
+      if (isMarkerGroundedInSource(m, sourceForGrounding)) return true;
       console.log(`[Decifra extract] Removed ungrounded marker: "${m.marker}"`);
       return false;
     });
@@ -275,6 +341,10 @@ module.exports = async function handler(req, res) {
     if (markersRemoved > 0) {
       console.log(`[Decifra extract] Removed ${markersRemoved} hallucinated marker(s)`);
     }
+
+    // ocr_text is server-internal: useful for grounding, not exposed to the client to keep
+    // the response shape stable for the existing extract → review → interpret pipeline.
+    if ("ocr_text" in parsed) delete parsed.ocr_text;
 
     jsonHeaders(res, 200);
     return res.end(JSON.stringify({ ...parsed, _tier: tier }));

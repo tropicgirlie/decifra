@@ -4,14 +4,18 @@ Interpretação de exames laboratoriais femininos com contexto clínico, para o 
 
 ## Stack
 
-Idêntico ao Decode:
+Idêntico ao Decode, com uma diferença no modelo de interpretação:
 
 - Vanilla React via Babel no navegador, single-file `app.jsx`, sem build step
 - HTML/CSS estático
 - Vercel para hospedagem (`/api` rotas Node serverless)
-- Anthropic Claude (Haiku 4.5 para extração, Sonnet 4.5 para resumo)
+- **Anthropic Claude Haiku 4.5** para extração de marcadores em `api/extract.js` (suporta texto, PDF e fotos do laudo via JPG/PNG)
+- **Pipeline de dois passos para interpretação clínica** em `api/summary.js` (ver [ADR 0001](docs/adr/0001-summary-model-pipeline.md)):
+  1. **Claude Sonnet 4.5** raciocina sobre os marcadores e o contexto da paciente, produzindo o JSON da interpretação em inglês.
+  2. **Maritaca Sabiá-3** traduz o JSON para português brasileiro nativo, com voz clínica brasileira e convenções locais (mUI/L, vírgula decimal, convênio/SUS, CFM/CRM).
+  Se Sabiá-3 falhar, o próprio Claude faz a tradução em uma chamada de fallback. Se tudo falhar, devolvemos o inglês com flag.
 - Supabase para persistência de conta + contexto (projeto separado em São Paulo)
-- Stripe para pagamento (BRL, com PIX opcional — deferido para pós-MVP)
+- Stripe para pagamento (BRL, com PIX opcional. Deferido para pós-MVP.)
 
 ## Diferenças em relação ao Decode (EN)
 
@@ -85,7 +89,8 @@ Se `decifra.com.br` estiver indisponível, alternativas: `decifra.app.br`, `deci
    ```
 3. Em [vercel.com](https://vercel.com), **Import Project** → escolha o repositório.
 4. Configure variáveis de ambiente:
-   - `ANTHROPIC_API_KEY` (mesma chave da Decode EN ou nova para separar faturamento)
+   - `ANTHROPIC_API_KEY` (extração de marcadores em `api/extract.js`, e fallback de interpretação em `api/summary.js`)
+   - `MARITACA_API_KEY` (modelo primário de interpretação Sabiá-3 em `api/summary.js`. Veja passo 5b)
    - `SUPABASE_URL` (do passo 2)
    - `SUPABASE_ANON_KEY` (do passo 2)
    - `JWT_SECRET` (gerar com `openssl rand -base64 32`)
@@ -104,8 +109,18 @@ const SUPABASE_ANON_KEY = "SEU_ANON_KEY";
 ### 5. Configurar conta Anthropic e crédito
 
 - Use a mesma chave da Decode EN ou crie chave separada em [console.anthropic.com](https://console.anthropic.com/) para isolar o faturamento.
-- Adicione crédito (R$ 100 / US$ 20 cobre os primeiros 100–200 decifrações com Sonnet 4.5 no resumo).
+- Adicione crédito (R$ 100 / US$ 20 cobre os primeiros 100 a 200 decifrações).
 - Configure alerta de saldo baixo.
+- Anthropic continua sendo usada em `api/extract.js` (Haiku 4.5 para extração de texto e visão).
+
+### 5b. Configurar conta Maritaca (Sabiá-3) para a localização da interpretação
+
+- Crie conta em [plataforma.maritaca.ai](https://plataforma.maritaca.ai/) e gere uma chave em "Criar nova chave".
+- Adicione `MARITACA_API_KEY` às variáveis de ambiente da Vercel (Production + Preview + Development) e ao `.env.local` para desenvolvimento.
+- **Papel da Sabiá-3**: traduzir e localizar para português brasileiro nativo o JSON em inglês que Claude Sonnet 4.5 produz no passo 1. Não é responsável pelo raciocínio clínico. Veja [ADR 0001](docs/adr/0001-summary-model-pipeline.md) para o porquê dessa separação.
+- Se a Maritaca ficar indisponível ou retornar JSON com forma inválida, `api/summary.js` chama Claude novamente para traduzir. Em último caso, devolve o inglês com `_translation_status: "failed_en"` para o cliente lidar.
+- `ANTHROPIC_API_KEY` é obrigatória em produção (raciocínio + fallback). `MARITACA_API_KEY` é fortemente recomendada mas opcional.
+- Faturamento Maritaca é em BRL, separado do Anthropic. Monitore os dois.
 
 ### 6. Designar Encarregada de Dados (DPO)
 

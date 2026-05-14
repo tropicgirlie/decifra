@@ -318,18 +318,19 @@ function feedbackMailto(context = "") {
   return `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
 }
 
-async function extractWithClaude(text) {
-  if (text.length > MAX_EXTRACT_CHARS) {
+async function extractWithClaude(text, images = []) {
+  if (text && text.length > MAX_EXTRACT_CHARS) {
     throw new Error(
-      `Report is too long (${text.length.toLocaleString()} characters). Maximum is ${MAX_EXTRACT_CHARS.toLocaleString()} — try splitting into one panel at a time, or paste only the results section.`
+      `O laudo está longo demais (${text.length.toLocaleString()} caracteres). O limite é ${MAX_EXTRACT_CHARS.toLocaleString()}. Tente dividir em um painel por vez, ou cole apenas a seção de resultados.`
     );
   }
+  const hasImages = Array.isArray(images) && images.length > 0;
   // Always use server-side Claude proxy — API key never exposed to browser.
   // Falls back to regexExtract (in startDecode) if the server is unreachable.
   const res = await fetch(`${window.location.origin}/api/extract`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(hasImages ? { text: text || "", images } : { text }),
     credentials: "same-origin",
   });
   if (!res.ok) {
@@ -464,302 +465,302 @@ function regexExtract(text) {
 
 // ---------- Interpretations (static; applied AFTER confirmation, no values changed) ----------
 const INTERPRETATIONS = {
-  "TSH": { measures: "Thyroid Stimulating Hormone, the pituitary signal that regulates thyroid output.",
-    female_context: "Thyroid shifts drive cycle irregularity, luteal-phase defects, and perimenopausal fatigue. TSH moves with pregnancy and with estrogen therapy.",
-    low: "Palpitations, heat intolerance, lighter or absent cycles, anxiety.",
-    high: "Fatigue, cold sensitivity, heavier cycles, hair thinning, subfertility.",
-    evidence: "strong" },
-  "FREE T4": { measures: "The unbound, bioavailable thyroid hormone circulating to tissues.",
-    female_context: "Read alongside TSH. Free T4 can flag central hypothyroidism that TSH misses, relevant in perimenopause and postpartum.",
-    low: "Persistent fatigue, cold intolerance, cognitive slowing.",
-    high: "Tremor, weight loss, disrupted sleep, cycle shortening.",
-    evidence: "strong" },
-  "FERRITIN": { measures: "Stored iron, the single best indicator of iron reserves.",
-    female_context: "Menstruating women lose iron monthly; ferritin often sits low even without anemia. Hair shedding and exercise fatigue appear well before hemoglobin drops.",
-    low: "Hair shedding, exercise intolerance, restless legs, breathlessness, brain fog.",
-    high: "Can reflect inflammation, liver stress, or iron overload. Investigate context.",
-    evidence: "strong" },
-  "VITAMIN D": { measures: "The storage form of vitamin D, reflecting the last ~2–3 weeks of status.",
-    female_context: "Low vitamin D is linked to PMS severity, PCOS metabolic features, and bone loss acceleration around menopause.",
-    low: "Musculoskeletal aches, low mood, poor sleep, immune susceptibility.",
-    high: "Rare outside supplementation; hypercalcemia risk at very high levels.",
-    evidence: "moderate" },
-  "PROGESTERONE": { measures: "The corpus-luteum hormone, dominant in the second half of an ovulatory cycle.",
-    female_context: "Cycle-day dependent. Mid-luteal samples above ~3 ng/mL typically indicate ovulation occurred. Progesterone declines first in perimenopause.",
-    low: "Short luteal phase, spotting, sleep disturbance, heightened anxiety pre-menses.",
-    high: "Can indicate pregnancy, luteal cyst, or exogenous progesterone.",
-    evidence: "strong" },
-  "ESTRADIOL": { measures: "The dominant estrogen in reproductive-age women, produced mainly by developing follicles.",
-    female_context: "Varies across the cycle: low in early follicular, peak pre-ovulation, second rise mid-luteal. Drops progressively through perimenopause.",
-    low: "Vaginal dryness, hot flashes, bone density loss, mood changes, cognitive fog.",
-    high: "Breast tenderness, heavy menses, or normal pre-ovulatory peak.",
-    evidence: "strong" },
-  "FSH": { measures: "Follicle Stimulating Hormone, drives follicle recruitment each cycle.",
-    female_context: "Best interpreted on cycle day 2–4. Rising FSH is one of the earliest markers of diminishing ovarian reserve and perimenopause onset.",
-    low: "Rare; can indicate pituitary suppression or hypothalamic amenorrhea.",
-    high: "Diminished ovarian reserve, perimenopause, menopause.",
-    evidence: "strong" },
-  "LH": { measures: "Luteinizing Hormone, triggers ovulation with its mid-cycle surge.",
-    female_context: "LH:FSH ratio >2 on early-follicular sampling is a supporting PCOS feature. Read with FSH and cycle day.",
-    low: "Hypothalamic suppression, low energy availability, stress-related amenorrhea.",
-    high: "PCOS pattern, ovulatory surge, or perimenopause.",
-    evidence: "moderate" },
-  "VITAMIN B12": { measures: "Cobalamin, needed for red-cell formation, myelin, and methylation.",
-    female_context: "Oral contraceptives and metformin lower B12. Deficiency mimics perimenopausal brain fog and fatigue and is often missed.",
-    low: "Fatigue, paresthesia, cognitive slowing, glossitis, mood changes.",
-    high: "Usually supplementation; rarely hematologic or hepatic causes.",
-    evidence: "strong" },
-  "HBA1C": { measures: "Average blood glucose over the preceding ~3 months, reflected in glycated hemoglobin.",
-    female_context: "Rising HbA1c in midlife tracks the menopausal shift toward insulin resistance. Relevant to PCOS metabolic screening.",
-    low: "Rarely concerning; consider hemolysis or shortened RBC lifespan.",
-    high: "Prediabetes (5.7–6.4%), diabetes (≥6.5%). Interacts with cycle irregularity and weight change.",
-    evidence: "strong" },
-  "CORTISOL": { measures: "Primary glucocorticoid; regulates stress response and glucose mobilization.",
-    female_context: "Chronic elevation suppresses ovulation, worsens sleep and perimenopausal symptoms, and amplifies abdominal adiposity." },
-  "AMH": { measures: "Anti-Müllerian Hormone, produced by small antral follicles.",
-    female_context: "Proxy for ovarian reserve. Useful for fertility planning, not a direct predictor of natural conception in a given cycle." },
-  "PROLACTIN": { measures: "Pituitary hormone; high levels suppress ovulation.",
-    female_context: "Elevated prolactin is a common, reversible cause of amenorrhea, galactorrhea, and subfertility." },
-  "TESTOSTERONE": { measures: "Androgen produced by ovaries and adrenals.",
-    female_context: "Elevated in PCOS; low levels associated with reduced libido and energy, especially post-oophorectomy." },
-  "SHBG": { measures: "Sex Hormone Binding Globulin, binds testosterone and estradiol in circulation.",
-    female_context: "Low SHBG raises free androgens (PCOS, insulin resistance). Estrogen and thyroid hormone raise it." },
-  "DHEA-S": { measures: "Adrenal androgen precursor.",
-    female_context: "Screens adrenal contribution in hyperandrogenism; declines steeply with age." },
-  "IRON": { measures: "Circulating serum iron, a snapshot not a store.",
-    female_context: "Use alongside ferritin and transferrin saturation; a single value is easily misleading mid-cycle." },
-  "FOLATE": { measures: "B9, required for DNA synthesis and red-cell formation.",
-    female_context: "Preconception relevance is high; deficiency raises neural tube defect risk." },
+  "TSH": { measures: "Hormônio Tireoestimulante (TSH), o sinal da hipófise que regula a produção da tireoide.",
+    female_context: "Mudanças tireoidianas causam irregularidade do ciclo, defeitos de fase lútea e fadiga no climatério. O TSH oscila com a gestação e com terapia estrogênica.",
+    low: "Palpitações, intolerância ao calor, ciclos mais leves ou ausentes, ansiedade.",
+    high: "Fadiga, sensibilidade ao frio, ciclos mais intensos, queda de cabelo, subfertilidade.",
+    evidence: "forte" },
+  "FREE T4": { measures: "A fração livre e biodisponível do hormônio tireoidiano que circula até os tecidos.",
+    female_context: "Leia junto com o TSH. O T4 livre pode revelar hipotireoidismo central que o TSH sozinho não detecta, importante no climatério e no pós-parto.",
+    low: "Fadiga persistente, intolerância ao frio, lentidão cognitiva.",
+    high: "Tremores, perda de peso, sono interrompido, encurtamento do ciclo.",
+    evidence: "forte" },
+  "FERRITIN": { measures: "Ferro armazenado, o melhor indicador isolado das reservas de ferro.",
+    female_context: "Mulheres que menstruam perdem ferro mensalmente. A ferritina costuma estar baixa mesmo sem anemia. Queda de cabelo e fadiga ao exercício aparecem bem antes de a hemoglobina cair.",
+    low: "Queda de cabelo, intolerância ao exercício, síndrome das pernas inquietas, falta de ar, nevoeiro mental.",
+    high: "Pode refletir inflamação, sobrecarga hepática ou excesso de ferro. Investigue o contexto.",
+    evidence: "forte" },
+  "VITAMIN D": { measures: "A forma de armazenamento da vitamina D, refletindo as últimas 2 a 3 semanas de status.",
+    female_context: "Vitamina D baixa está associada à intensidade da TPM, a características metabólicas da SOP e à aceleração da perda óssea no climatério.",
+    low: "Dores musculoesqueléticas, humor baixo, sono ruim, suscetibilidade imunológica.",
+    high: "Rara fora de suplementação. Risco de hipercalcemia em níveis muito altos.",
+    evidence: "moderada" },
+  "PROGESTERONE": { measures: "Hormônio do corpo lúteo, dominante na segunda metade de um ciclo ovulatório.",
+    female_context: "Depende do dia do ciclo. Amostras de meio da fase lútea acima de cerca de 3 ng/mL indicam que houve ovulação. A progesterona cai primeiro no climatério.",
+    low: "Fase lútea curta, escape, distúrbio do sono, ansiedade aumentada antes da menstruação.",
+    high: "Pode indicar gestação, cisto lúteo ou progesterona exógena.",
+    evidence: "forte" },
+  "ESTRADIOL": { measures: "O estrogênio dominante em mulheres em idade reprodutiva, produzido principalmente pelos folículos em desenvolvimento.",
+    female_context: "Varia ao longo do ciclo: baixo no início da fase folicular, pico antes da ovulação, segunda elevação no meio da fase lútea. Cai progressivamente no climatério.",
+    low: "Ressecamento vaginal, fogachos, perda de densidade óssea, alterações de humor, nevoeiro cognitivo.",
+    high: "Sensibilidade nas mamas, menstruações intensas, ou pico pré-ovulatório normal.",
+    evidence: "forte" },
+  "FSH": { measures: "Hormônio Folículo-Estimulante (FSH), conduz o recrutamento folicular a cada ciclo.",
+    female_context: "Melhor interpretado entre os dias 2 e 4 do ciclo. Aumento do FSH é um dos primeiros sinais de queda da reserva ovariana e do início do climatério.",
+    low: "Raro. Pode indicar supressão hipofisária ou amenorreia hipotalâmica.",
+    high: "Reserva ovariana diminuída, climatério, menopausa.",
+    evidence: "forte" },
+  "LH": { measures: "Hormônio Luteinizante (LH), desencadeia a ovulação com seu pico no meio do ciclo.",
+    female_context: "Razão LH/FSH acima de 2 em coleta na fase folicular inicial é uma característica de apoio à SOP. Leia junto com FSH e dia do ciclo.",
+    low: "Supressão hipotalâmica, baixa disponibilidade de energia, amenorreia relacionada ao estresse.",
+    high: "Padrão de SOP, pico ovulatório, ou climatério.",
+    evidence: "moderada" },
+  "VITAMIN B12": { measures: "Cobalamina, necessária para formação de hemácias, mielina e metilação.",
+    female_context: "Contraceptivos orais e metformina reduzem a B12. A deficiência simula o nevoeiro mental e a fadiga do climatério, e costuma passar despercebida.",
+    low: "Fadiga, parestesia, lentidão cognitiva, glossite, alterações de humor.",
+    high: "Geralmente por suplementação. Raramente por causas hematológicas ou hepáticas.",
+    evidence: "forte" },
+  "HBA1C": { measures: "Glicose média no sangue dos últimos 3 meses aproximadamente, refletida na hemoglobina glicada.",
+    female_context: "Aumento da HbA1c na meia-idade acompanha a mudança metabólica do climatério em direção à resistência à insulina. Relevante para o rastreio metabólico na SOP.",
+    low: "Raramente preocupante. Considere hemólise ou redução do tempo de vida das hemácias.",
+    high: "Pré-diabetes (5,7 a 6,4%), diabetes (a partir de 6,5%). Interage com irregularidade do ciclo e variação de peso.",
+    evidence: "forte" },
+  "CORTISOL": { measures: "Principal glicocorticoide. Regula a resposta ao estresse e a mobilização de glicose.",
+    female_context: "Elevação crônica suprime a ovulação, piora o sono e os sintomas do climatério, e amplifica a adiposidade abdominal." },
+  "AMH": { measures: "Hormônio Antimülleriano (HAM), produzido pelos pequenos folículos antrais.",
+    female_context: "Marcador indireto de reserva ovariana. Útil para planejamento de fertilidade, não preditor direto de concepção natural em um ciclo específico." },
+  "PROLACTIN": { measures: "Hormônio hipofisário. Níveis altos suprimem a ovulação.",
+    female_context: "Prolactina elevada é causa comum e reversível de amenorreia, galactorreia e subfertilidade." },
+  "TESTOSTERONE": { measures: "Andrógeno produzido pelos ovários e pelas suprarrenais.",
+    female_context: "Elevado na SOP. Níveis baixos associam-se à redução da libido e da energia, especialmente após ooforectomia." },
+  "SHBG": { measures: "Globulina Ligadora de Hormônios Sexuais (SHBG), liga testosterona e estradiol na circulação.",
+    female_context: "SHBG baixa eleva os andrógenos livres (SOP, resistência à insulina). Estrogênio e hormônio tireoidiano elevam a SHBG." },
+  "DHEA-S": { measures: "Precursor de andrógeno produzido pelas suprarrenais.",
+    female_context: "Rastreia a contribuição adrenal no hiperandrogenismo. Cai acentuadamente com a idade." },
+  "IRON": { measures: "Ferro sérico circulante, uma fotografia do momento, não um estoque.",
+    female_context: "Use junto com a ferritina e a saturação de transferrina. Um valor isolado pode ser enganoso conforme o dia do ciclo." },
+  "FOLATE": { measures: "Vitamina B9 (folato), necessária para síntese de DNA e formação de hemácias.",
+    female_context: "Relevância pré-concepcional alta. A deficiência aumenta o risco de defeito do tubo neural." },
 
-  // ── Thyroid (extended) ───────────────────────────────────────────────────
-  "FREE T3": { measures: "Triiodothyronine, the biologically active thyroid hormone at the cellular level.",
-    female_context: "Many women feel hypothyroid symptoms with normal TSH and T4 but low-normal Free T3. Stress, low-calorie diets, and iron deficiency all impair T4-to-T3 conversion. Particularly relevant in perimenopause and postpartum.",
-    low: "Fatigue, brain fog, cold intolerance, low mood, constipation, hair loss, even when TSH is normal.",
-    high: "Palpitations, heat intolerance, anxiety, weight loss. Less common if T4 is also normal.",
-    evidence: "moderate" },
+  // ── Tireoide (estendido) ─────────────────────────────────────────────────
+  "FREE T3": { measures: "Tri-iodotironina (T3 livre), o hormônio tireoidiano biologicamente ativo no nível celular.",
+    female_context: "Muitas mulheres sentem sintomas de hipotireoidismo com TSH e T4 normais, mas com T3 livre no limite inferior. Estresse, dietas de muito baixa caloria e deficiência de ferro prejudicam a conversão de T4 em T3. Particularmente relevante no climatério e no pós-parto.",
+    low: "Fadiga, nevoeiro mental, intolerância ao frio, humor baixo, constipação, queda de cabelo, mesmo com TSH normal.",
+    high: "Palpitações, intolerância ao calor, ansiedade, perda de peso. Menos comum se o T4 também estiver normal.",
+    evidence: "moderada" },
 
-  "ANTI-TPO": { measures: "Anti-thyroid peroxidase antibodies, the primary marker for autoimmune thyroid disease.",
-    female_context: "Hashimoto's thyroiditis is the most common autoimmune condition in women. Positive Anti-TPO can precede TSH elevation by years. Linked to miscarriage, depression, postpartum thyroiditis, and PCOS overlap. Women with positive antibodies and 'normal' TSH should still be monitored.",
-    low: "Normal (negative). Reference range typically <35 IU/mL.",
-    high: "Suggests autoimmune thyroiditis. Elevated in Hashimoto's and Graves' disease.",
-    evidence: "strong" },
+  "ANTI-TPO": { measures: "Anticorpos antitireoperoxidase (anti-TPO), principal marcador de doença tireoidiana autoimune.",
+    female_context: "A tireoidite de Hashimoto é a condição autoimune mais comum em mulheres. Anti-TPO positivo pode preceder a elevação do TSH em anos. Associado a perda gestacional, depressão, tireoidite pós-parto e sobreposição com SOP. Mulheres com anticorpos positivos e TSH 'normal' merecem acompanhamento.",
+    low: "Normal (negativo). Faixa de referência tipicamente abaixo de 35 UI/mL.",
+    high: "Sugere tireoidite autoimune. Elevado em Hashimoto e em Graves.",
+    evidence: "forte" },
 
-  "ANTI-TG": { measures: "Anti-thyroglobulin antibodies, a secondary marker for autoimmune thyroid disease.",
-    female_context: "Present in ~60–80% of Hashimoto's cases; useful when Anti-TPO is borderline. Also elevated in some thyroid cancers. Less specific than Anti-TPO but adds diagnostic information when both are tested.",
-    low: "Normal (negative). Reference range typically <40 IU/mL.",
-    high: "Suggests autoimmune thyroiditis alongside Anti-TPO.",
-    evidence: "moderate" },
+  "ANTI-TG": { measures: "Anticorpos anti-tireoglobulina (anti-TG), marcador secundário de doença tireoidiana autoimune.",
+    female_context: "Presente em 60 a 80% dos casos de Hashimoto. Útil quando o anti-TPO está no limite. Também elevado em alguns cânceres de tireoide. Menos específico que o anti-TPO, mas acrescenta informação quando os dois são pedidos juntos.",
+    low: "Normal (negativo). Faixa de referência tipicamente abaixo de 40 UI/mL.",
+    high: "Sugere tireoidite autoimune ao lado do anti-TPO.",
+    evidence: "moderada" },
 
-  "REVERSE T3": { measures: "An inactive form of T3 produced from T4, competing with active Free T3 at receptor sites.",
-    female_context: "Elevated Reverse T3 blocks active T3 from working, producing hypothyroid symptoms despite normal TSH. Rises under severe stress, illness, very low-calorie diets, and cortisol excess. Relevant when symptoms persist after standard thyroid treatment.",
-    low: "May indicate low T4 production overall.",
-    high: "Suggests impaired T4-to-T3 conversion. High Reverse T3 with low-normal Free T3 is clinically significant.",
-    evidence: "emerging" },
+  "REVERSE T3": { measures: "Uma forma inativa de T3 produzida a partir do T4, que compete com o T3 livre ativo nos sítios receptores.",
+    female_context: "T3 reverso elevado bloqueia o T3 ativo, produzindo sintomas de hipotireoidismo apesar de TSH normal. Sobe em estresse severo, doença, dietas de muito baixa caloria e excesso de cortisol. Relevante quando os sintomas persistem após tratamento padrão da tireoide.",
+    low: "Pode indicar baixa produção geral de T4.",
+    high: "Sugere prejuízo na conversão de T4 em T3. T3 reverso alto com T3 livre no limite inferior é clinicamente significativo.",
+    evidence: "emergente" },
 
-  // ── Inflammation ─────────────────────────────────────────────────────────
-  "HSCRP": { measures: "High-sensitivity C-reactive protein, a marker of systemic low-grade inflammation.",
-    female_context: "Elevated in PCOS, endometriosis, perimenopause, and metabolic syndrome. A raised hsCRP (above 1 mg/L) alongside hormonal imbalance points toward inflammatory drivers of symptoms. Cardiovascular risk doubles in menopausal women with hsCRP above 3 mg/L. Suppressed by oestrogen; levels often rise at menopause.",
-    low: "Below 1 mg/L: low cardiovascular risk. Good baseline.",
-    high: "1–3 mg/L: intermediate risk. Above 3 mg/L: high risk. Rule out acute infection before interpreting.",
-    evidence: "strong" },
+  // ── Inflamação ───────────────────────────────────────────────────────────
+  "HSCRP": { measures: "Proteína C-reativa ultrassensível (PCR-us), marcador de inflamação sistêmica de baixo grau.",
+    female_context: "Elevada em SOP, endometriose, climatério e síndrome metabólica. PCR-us aumentada (acima de 1 mg/L) somada a desequilíbrio hormonal aponta para causas inflamatórias dos sintomas. O risco cardiovascular dobra em mulheres na menopausa com PCR-us acima de 3 mg/L. Suprimida pelo estrogênio. Costuma subir na menopausa.",
+    low: "Abaixo de 1 mg/L: risco cardiovascular baixo. Bom basal.",
+    high: "1 a 3 mg/L: risco intermediário. Acima de 3 mg/L: risco alto. Descarte infecção aguda antes de interpretar.",
+    evidence: "forte" },
 
-  "CRP": { measures: "C-reactive protein, an acute-phase inflammatory protein produced by the liver.",
-    female_context: "Standard CRP detects gross inflammation; hsCRP is more sensitive for low-grade chronic inflammation relevant to hormonal health. Elevated in active endometriosis, PCOS, autoimmune thyroid disease, and perimenopausal cardiovascular risk.",
-    low: "Below 5 mg/L: typically normal.",
-    high: "Above 10 mg/L usually indicates active infection or significant inflammatory disease.",
-    evidence: "strong" },
+  "CRP": { measures: "Proteína C-reativa (PCR), proteína inflamatória de fase aguda produzida pelo fígado.",
+    female_context: "A PCR padrão detecta inflamação grosseira. A PCR-us é mais sensível para inflamação crônica de baixo grau, relevante para saúde hormonal. Elevada em endometriose ativa, SOP, doença tireoidiana autoimune e risco cardiovascular do climatério.",
+    low: "Abaixo de 5 mg/L: tipicamente normal.",
+    high: "Acima de 10 mg/L geralmente indica infecção ativa ou doença inflamatória significativa.",
+    evidence: "forte" },
 
-  // ── Metabolic ────────────────────────────────────────────────────────────
-  "FASTING GLUCOSE": { measures: "Blood glucose measured after a minimum 8-hour fast, reflecting baseline glycaemic control.",
-    female_context: "Women with PCOS have a significantly elevated lifetime risk of type 2 diabetes. Fasting glucose changes precede HbA1c elevation by years. Glucose metabolism shifts at perimenopause as oestrogen loss impairs insulin sensitivity. A fasting glucose of 5.6–6.9 mmol/L (100–125 mg/dL) defines prediabetes.",
-    low: "Below 3.9 mmol/L (70 mg/dL): hypoglycaemia. Can cause fatigue, shakiness, brain fog, sometimes misread as anxiety.",
-    high: "5.6–6.9 mmol/L: prediabetes. At or above 7.0 mmol/L on two occasions: diabetes.",
-    evidence: "strong" },
+  // ── Metabolismo ──────────────────────────────────────────────────────────
+  "FASTING GLUCOSE": { measures: "Glicose no sangue medida após jejum mínimo de 8 horas, refletindo o controle glicêmico basal.",
+    female_context: "Mulheres com SOP têm risco significativamente elevado de diabetes tipo 2 ao longo da vida. Alterações da glicose em jejum precedem a elevação da HbA1c em anos. O metabolismo da glicose muda no climatério, quando a perda de estrogênio prejudica a sensibilidade à insulina. Glicose em jejum de 100 a 125 mg/dL define pré-diabetes.",
+    low: "Abaixo de 70 mg/dL: hipoglicemia. Pode causar fadiga, tremores, nevoeiro mental, às vezes confundidos com ansiedade.",
+    high: "100 a 125 mg/dL: pré-diabetes. Igual ou acima de 126 mg/dL em duas ocasiões: diabetes.",
+    evidence: "forte" },
 
-  "FASTING INSULIN": { measures: "Insulin measured after a minimum 8-hour fast, reflecting pancreatic insulin output and sensitivity.",
-    female_context: "Insulin resistance is present in 70–80% of women with PCOS, even those who are lean. Elevated fasting insulin with normal glucose is the earliest metabolic signal, appearing years before HbA1c changes. Rarely included in standard panels but arguably the most clinically important metabolic marker for reproductive-age women with hormonal symptoms.",
-    low: "Below 3 μIU/mL: may suggest inadequate insulin production.",
-    high: "Above 10–15 μIU/mL fasting: suggestive of insulin resistance. Interpret with fasting glucose via HOMA-IR.",
-    evidence: "strong" },
+  "FASTING INSULIN": { measures: "Insulina medida após jejum mínimo de 8 horas, refletindo a produção pancreática de insulina e a sensibilidade à insulina.",
+    female_context: "A resistência à insulina está presente em 70 a 80% das mulheres com SOP, inclusive nas magras. Insulina em jejum elevada com glicose normal é o sinal metabólico mais precoce, aparecendo anos antes de a HbA1c se alterar. Raramente entra nos painéis padrão, mas é provavelmente o marcador metabólico clinicamente mais importante para mulheres em idade reprodutiva com sintomas hormonais.",
+    low: "Abaixo de 3 µUI/mL: pode sugerir produção insuficiente de insulina.",
+    high: "Acima de 10 a 15 µUI/mL em jejum sugere resistência à insulina. Interprete junto com a glicose em jejum via HOMA-IR.",
+    evidence: "forte" },
 
-  "HOMA-IR": { measures: "Homeostatic Model Assessment of Insulin Resistance, calculated from fasting glucose × fasting insulin ÷ 22.5.",
-    female_context: "The most accessible clinical measure of insulin resistance without a glucose tolerance test. A value above 2.0 suggests insulin resistance; above 2.5 is clinically significant in most populations. Women with PCOS, perimenopausal weight gain, or difficulty losing weight despite lifestyle change should prioritise this marker.",
-    low: "Below 1.0: good insulin sensitivity.",
-    high: "Above 2.0–2.5: insulin resistance. Above 3.5: significant resistance. Drives androgen excess in PCOS and cardiovascular risk post-menopause.",
-    evidence: "strong" },
+  "HOMA-IR": { measures: "Modelo Homeostático de Avaliação de Resistência à Insulina (HOMA-IR), calculado como glicose em jejum vezes insulina em jejum, dividido por 22,5.",
+    female_context: "A medida clínica mais acessível de resistência à insulina sem teste oral de tolerância à glicose. Valor acima de 2,0 sugere resistência à insulina. Acima de 2,5 é clinicamente significativo na maioria das populações. Mulheres com SOP, ganho de peso no climatério, ou dificuldade para perder peso apesar de mudanças no estilo de vida, devem priorizar esse marcador.",
+    low: "Abaixo de 1,0: boa sensibilidade à insulina.",
+    high: "Acima de 2,0 a 2,5: resistência à insulina. Acima de 3,5: resistência significativa. Impulsiona o excesso de andrógenos na SOP e o risco cardiovascular após a menopausa.",
+    evidence: "forte" },
 
-  // ── Lipids ───────────────────────────────────────────────────────────────
-  "TOTAL CHOLESTEROL": { measures: "The sum of all cholesterol in the blood: HDL, LDL, VLDL.",
-    female_context: "Women have naturally higher HDL than men, which masks cardiovascular risk when only total cholesterol is evaluated. The ratio of total cholesterol to HDL is more informative. Cholesterol rises sharply at menopause as oestrogen loss impairs LDL clearance.",
-    low: "Below 3.0 mmol/L: rare; may affect steroid hormone production and cell membrane integrity.",
-    high: "Above 5.2 mmol/L (200 mg/dL): elevated. Risk context depends heavily on the HDL:LDL split.",
-    evidence: "strong" },
+  // ── Lipídios ─────────────────────────────────────────────────────────────
+  "TOTAL CHOLESTEROL": { measures: "Soma de todo o colesterol no sangue: HDL, LDL e VLDL.",
+    female_context: "Mulheres têm naturalmente HDL mais alto que os homens, o que mascara o risco cardiovascular quando se avalia apenas o colesterol total. A razão entre colesterol total e HDL é mais informativa. O colesterol sobe acentuadamente na menopausa, quando a perda de estrogênio prejudica a depuração do LDL.",
+    low: "Abaixo de 115 mg/dL: raro. Pode afetar a produção de hormônios esteroides e a integridade das membranas celulares.",
+    high: "Acima de 200 mg/dL: elevado. O contexto de risco depende muito da relação HDL/LDL.",
+    evidence: "forte" },
 
-  "LDL": { measures: "Low-density lipoprotein, the primary carrier of cholesterol to tissues; key cardiovascular risk marker.",
-    female_context: "LDL rises significantly at perimenopause and menopause as oestrogen (which upregulates LDL receptors) declines. Women who were previously low-risk may cross into elevated LDL in their 50s without any dietary change. Particle size matters: small dense LDL is more atherogenic.",
-    low: "Below 1.8 mmol/L: optimal, particularly if other cardiovascular risk factors present.",
-    high: "Above 3.0 mmol/L: elevated. Above 4.0: high risk. Context with HDL, triglycerides and hsCRP.",
-    evidence: "strong" },
+  "LDL": { measures: "Lipoproteína de baixa densidade (LDL), principal transportadora de colesterol para os tecidos. Marcador-chave de risco cardiovascular.",
+    female_context: "O LDL sobe significativamente no climatério e na menopausa, quando o estrogênio (que estimula os receptores de LDL) cai. Mulheres anteriormente de baixo risco podem ter LDL elevado aos 50 anos sem nenhuma mudança alimentar. O tamanho das partículas importa: LDL pequeno e denso é mais aterogênico.",
+    low: "Abaixo de 70 mg/dL: ideal, especialmente se houver outros fatores de risco cardiovascular.",
+    high: "Acima de 115 mg/dL: elevado. Acima de 155 mg/dL: risco alto. Interprete com HDL, triglicérides e PCR-us.",
+    evidence: "forte" },
 
-  "HDL": { measures: "High-density lipoprotein, the cholesterol 'transporter' from tissues back to the liver; protective.",
-    female_context: "Women naturally have higher HDL than men due to oestrogen effects. HDL falls at menopause and with insulin resistance; a declining HDL in a perimenopausal woman is an early metabolic signal. Low HDL combined with high triglycerides is the most dangerous lipid pattern for cardiovascular risk.",
-    low: "Below 1.0 mmol/L in women (40 mg/dL): significantly elevated cardiovascular risk.",
-    high: "Above 1.6 mmol/L (60 mg/dL): protective. Very high HDL (above 2.5) may paradoxically lose protective function.",
-    evidence: "strong" },
+  "HDL": { measures: "Lipoproteína de alta densidade (HDL), o 'transportador' do colesterol dos tecidos de volta para o fígado. Protetora.",
+    female_context: "Mulheres naturalmente têm HDL mais alto que homens, por efeito do estrogênio. O HDL cai na menopausa e com resistência à insulina. HDL em queda em uma mulher no climatério é um sinal metabólico precoce. HDL baixo somado a triglicérides altos é o padrão lipídico mais perigoso para risco cardiovascular.",
+    low: "Abaixo de 40 mg/dL em mulheres: risco cardiovascular significativamente elevado.",
+    high: "Acima de 60 mg/dL: protetor. HDL muito alto (acima de 100 mg/dL) pode paradoxalmente perder a função protetora.",
+    evidence: "forte" },
 
-  "TRIGLYCERIDES": { measures: "Blood fats reflecting dietary carbohydrate intake, liver fat production, and insulin sensitivity.",
-    female_context: "Triglycerides are highly sensitive to oestrogen and insulin; they rise with insulin resistance (common in PCOS) and at menopause. A fasting triglyceride above 1.7 mmol/L (150 mg/dL) is an early marker of metabolic dysfunction. The triglyceride:HDL ratio is one of the strongest predictors of insulin resistance in women.",
-    low: "Below 0.9 mmol/L (80 mg/dL): optimal.",
-    high: "Above 1.7 mmol/L: elevated. Above 5.6 mmol/L: risk of pancreatitis.",
-    evidence: "strong" },
+  "TRIGLYCERIDES": { measures: "Gorduras no sangue que refletem ingestão de carboidratos, produção hepática de gordura e sensibilidade à insulina.",
+    female_context: "Triglicérides são altamente sensíveis ao estrogênio e à insulina. Sobem com resistência à insulina (comum na SOP) e na menopausa. Triglicérides em jejum acima de 150 mg/dL é um marcador precoce de disfunção metabólica. A razão triglicérides/HDL é um dos preditores mais fortes de resistência à insulina em mulheres.",
+    low: "Abaixo de 80 mg/dL: ideal.",
+    high: "Acima de 150 mg/dL: elevado. Acima de 500 mg/dL: risco de pancreatite.",
+    evidence: "forte" },
 
-  "GLUCOSE": { measures: "Blood glucose concentration (random or laboratory glucose line as labelled on the report).",
-    female_context: "Glycaemic control interacts with PCOS, gestational diabetes risk, and menopausal metabolic shift. Interpret with fasting status and HbA1c when available; pregnancy thresholds differ from non-pregnant ranges.",
-    low: "Symptomatic hypoglycaemia needs clinical context; laboratory low ranges vary by method.",
-    high: "Elevated values warrant correlation with HbA1c, pregnancy status, and symptoms.",
-    evidence: "strong" },
+  "GLUCOSE": { measures: "Concentração de glicose no sangue (medida aleatória ou linha laboratorial de glicose conforme rotulada no laudo).",
+    female_context: "O controle glicêmico interage com SOP, risco de diabetes gestacional e a mudança metabólica do climatério. Interprete com o status de jejum e a HbA1c quando disponível. Limites na gestação diferem dos não gestacionais.",
+    low: "Hipoglicemia sintomática precisa de contexto clínico. Faixas baixas variam por método laboratorial.",
+    high: "Valores elevados merecem correlação com HbA1c, status gestacional e sintomas.",
+    evidence: "forte" },
 
-  "CREATININE": { measures: "Muscle metabolism waste filtered by the kidneys; core marker of renal clearance.",
-    female_context: "CKD is under-recognised in women; eGFR should be interpreted with muscle mass and pregnancy state. Many drugs used in gynaecology and obstetrics require dose adjustment when renal function falls.",
-    low: "Rarely low in isolation; consider low muscle mass.",
-    high: "Rising creatinine with falling eGFR warrants nephrology follow-up and medication review.",
-    evidence: "strong" },
+  "CREATININE": { measures: "Resíduo do metabolismo muscular filtrado pelos rins. Marcador central de depuração renal.",
+    female_context: "A doença renal crônica é subdiagnosticada em mulheres. A TFG estimada (eGFR) deve ser interpretada com massa muscular e status gestacional. Muitos medicamentos usados em ginecologia e obstetrícia exigem ajuste de dose quando a função renal cai.",
+    low: "Raramente baixa isoladamente. Considere baixa massa muscular.",
+    high: "Creatinina em alta com TFG em queda merece acompanhamento nefrológico e revisão das medicações.",
+    evidence: "forte" },
 
-  "EGFR": { measures: "Estimated glomerular filtration rate, derived from creatinine and demographics.",
-    female_context: "Drug dosing, contrast decisions, and pregnancy planning use eGFR. Autoimmune disease and hypertension — common in women with PCOS or preeclampsia history — accelerate decline.",
-    low: "Values interpreted against age and ethnicity per laboratory equation.",
-    high: "Persistently reduced eGFR defines CKD staging and triggers cardiovascular risk reduction.",
-    evidence: "strong" },
+  "EGFR": { measures: "Taxa de filtração glomerular estimada (TFGe), derivada da creatinina e de dados demográficos.",
+    female_context: "Dose de medicamentos, decisões sobre contraste e planejamento gestacional usam a TFGe. Doença autoimune e hipertensão, comuns em mulheres com SOP ou histórico de pré-eclâmpsia, aceleram o declínio.",
+    low: "Valores interpretados conforme idade e etnia, pela equação do laboratório.",
+    high: "TFGe persistentemente reduzida define o estadiamento da doença renal crônica e dispara redução de risco cardiovascular.",
+    evidence: "forte" },
 
-  "WBC": { measures: "White blood cell count, reflecting immune marrow output and acute stress.",
-    female_context: "Leukocytosis in pregnancy can be physiological; in non-pregnant women, infection, inflammation (including pelvic), and medications are common causes. Low WBC may relate to autoimmunity or marrow suppression.",
-    low: "Neutropaenia thresholds are lab-specific; correlate with symptoms and differentials.",
-    high: "Leukocytosis needs infection vs inflammation work-up in clinical context.",
-    evidence: "strong" },
+  "WBC": { measures: "Contagem de leucócitos (glóbulos brancos), reflete a produção medular imune e o estresse agudo.",
+    female_context: "Leucocitose na gestação pode ser fisiológica. Em mulheres não gestantes, infecção, inflamação (inclusive pélvica) e medicações são causas comuns. Leucócitos baixos podem se relacionar a autoimunidade ou supressão medular.",
+    low: "Limites de neutropenia são específicos do laboratório. Correlacione com sintomas e diferenciais.",
+    high: "Leucocitose exige investigação de infecção versus inflamação no contexto clínico.",
+    evidence: "forte" },
 
-  "RBC": { measures: "Red blood cell count, parallel to haemoglobin for anaemia typing.",
-    female_context: "Heavy menstrual bleeding drives iron-deficiency patterns (often low RBC with low MCV). Thalassaemia trait can raise RBC count with low MCV — common in some ancestries.",
-    low: "Low with low Hb supports anaemia; interpret with MCV and ferritin.",
-    high: "Polycythaemia is uncommon; consider dehydration or haematology referral.",
-    evidence: "strong" },
+  "RBC": { measures: "Contagem de hemácias, em paralelo à hemoglobina para tipagem da anemia.",
+    female_context: "Sangramento menstrual intenso causa padrões de deficiência de ferro (frequentemente hemácias baixas com VCM baixo). Traço talassêmico pode aumentar a contagem de hemácias com VCM baixo, comum em algumas ancestralidades.",
+    low: "Hemácias baixas com Hb baixa apoiam anemia. Interprete com VCM e ferritina.",
+    high: "Policitemia é incomum. Considere desidratação ou encaminhamento à hematologia.",
+    evidence: "forte" },
 
-  "PLATELETS": { measures: "Platelet count, central to clotting and surgical risk.",
-    female_context: "Thrombocytopenia in pregnancy (gestational thrombocytopenia, HELLP) and platelet rise in iron deficiency are classic female-specific patterns. Affects epidural and surgical planning.",
-    low: "Below ~150 ×10⁹/L warrants obstetric review if pregnant; thresholds vary by trimester.",
-    high: "Reactive thrombocytosis often follows iron deficiency correction or inflammation.",
-    evidence: "strong" },
+  "PLATELETS": { measures: "Contagem de plaquetas, central para a coagulação e para o risco cirúrgico.",
+    female_context: "Trombocitopenia na gestação (trombocitopenia gestacional, HELLP) e elevação de plaquetas na deficiência de ferro são padrões clássicos da saúde feminina. Influenciam planejamento de anestesia peridural e cirurgia.",
+    low: "Abaixo de aproximadamente 150 mil/µL merece avaliação obstétrica se a paciente estiver gestante. Os limites variam por trimestre.",
+    high: "Trombocitose reativa costuma vir após correção de deficiência de ferro ou inflamação.",
+    evidence: "forte" },
 
-  "MCH": { measures: "Mean corpuscular haemoglobin, average Hb per red cell.",
-    female_context: "Low MCH with low MCV supports iron deficiency in menstruating women. High MCH with high MCV suggests B12/folate issues.",
-    low: "Hypochromia on smear correlates with iron deficiency.",
-    high: "Hyperchromia suggests macrocytosis work-up.",
-    evidence: "moderate" },
+  "MCH": { measures: "Hemoglobina Corpuscular Média (HCM), Hb média por hemácia.",
+    female_context: "HCM baixa com VCM baixo apoia deficiência de ferro em mulheres que menstruam. HCM alta com VCM alto sugere problemas com B12 ou folato.",
+    low: "Hipocromia no esfregaço correlaciona com deficiência de ferro.",
+    high: "Hipercromia sugere investigação de macrocitose.",
+    evidence: "moderada" },
 
-  "MCHC": { measures: "Mean corpuscular haemoglobin concentration.",
-    female_context: "Used with MCV and MCH to classify anaemia; spherocytosis and technical artefacts can shift MCHC.",
-    low: "Low MCHC with microcytosis supports iron deficiency.",
-    high: "Spurious highs can occur with haemolysis or cold agglutinins.",
-    evidence: "moderate" },
+  "MCHC": { measures: "Concentração de Hemoglobina Corpuscular Média (CHCM).",
+    female_context: "Usada com VCM e HCM para classificar a anemia. Esferocitose e artefatos técnicos podem alterar a CHCM.",
+    low: "CHCM baixa com microcitose apoia deficiência de ferro.",
+    high: "Valores espuriamente altos podem ocorrer com hemólise ou crioaglutininas.",
+    evidence: "moderada" },
 
-  "ALT": { measures: "Alanine aminotransferase, a hepatocellular enzyme.",
-    female_context: "NAFLD prevalence rises after menopause and in PCOS; mild ALT elevation is often the first biochemical clue. Oral oestrogens, pregnancy (HELLP), and alcohol interact with interpretation.",
-    low: "Isolated low ALT is rarely clinically significant.",
-    high: "Persistent elevation warrants metabolic and viral hepatitis evaluation.",
-    evidence: "strong" },
+  "ALT": { measures: "TGP (ALT). Alanina aminotransferase, enzima hepatocelular.",
+    female_context: "A prevalência de gordura no fígado (esteatose hepática) sobe após a menopausa e na SOP. Elevação leve de TGP/ALT é frequentemente a primeira pista bioquímica. Estrogênios orais, gestação (HELLP) e álcool interagem com a interpretação.",
+    low: "TGP/ALT baixa isolada raramente é clinicamente significativa.",
+    high: "Elevação persistente merece avaliação metabólica e de hepatites virais.",
+    evidence: "forte" },
 
-  "AST": { measures: "Aspartate aminotransferase, found in liver and muscle.",
-    female_context: "AST:ALT ratio >2 suggests alcohol-related injury; both enzymes rise in NAFLD and drug-induced injury. Muscle injury postpartum or after exercise can raise AST disproportionately.",
-    low: "Rarely clinically important alone.",
-    high: "Interpret alongside ALT, GGT, and clinical context.",
-    evidence: "strong" },
+  "AST": { measures: "TGO (AST). Aspartato aminotransferase, encontrada no fígado e no músculo.",
+    female_context: "Razão TGO/TGP acima de 2 sugere lesão relacionada ao álcool. Ambas as enzimas sobem na gordura no fígado (esteatose hepática) e em lesão induzida por medicamentos. Lesão muscular pós-parto ou após exercício pode aumentar a TGO/AST desproporcionalmente.",
+    low: "Raramente importante clinicamente sozinha.",
+    high: "Interprete junto com TGP/ALT, Gama-GT e contexto clínico.",
+    evidence: "forte" },
 
-  "BHCG": { measures: "Human chorionic gonadotropin, produced by trophoblast after implantation.",
-    female_context: "Serial β-hCG supports viability of early pregnancy, ectopic pregnancy risk stratification, and post-molar surveillance. Non-pregnant elevations require gynaecologic oncology input.",
-    low: "Undetectable in non-pregnant state; in early pregnancy, doubling pattern matters more than a single value.",
-    high: "Rising appropriately in pregnancy; plateau or fall prompts obstetric ultrasound and exclusion of ectopic or miscarriage.",
-    evidence: "strong" },
+  "BHCG": { measures: "Gonadotrofina coriônica humana (beta-hCG), produzida pelo trofoblasto após a implantação.",
+    female_context: "Beta-hCG seriado apoia a viabilidade da gestação inicial, a estratificação de risco de gravidez ectópica e a vigilância pós-molar. Elevações fora da gestação exigem avaliação em oncologia ginecológica.",
+    low: "Indetectável fora da gestação. Em gestação inicial, o padrão de duplicação importa mais do que um valor isolado.",
+    high: "Crescendo adequadamente na gestação. Platô ou queda exige ultrassom obstétrico e exclusão de gestação ectópica ou perda gestacional.",
+    evidence: "forte" },
 
-  // ── Reproductive-specific ────────────────────────────────────────────────
-  "CA-125": { measures: "Cancer antigen 125, a glycoprotein produced by epithelial cells; elevated in endometriosis, ovarian cysts, and some cancers.",
-    female_context: "CA-125 is not diagnostic for endometriosis alone; it has 50–60% sensitivity and is often normal in mild disease. However, a CA-125 above 35 U/mL in a woman with pelvic pain, dysmenorrhoea, or deep dyspareunia is clinically significant and warrants further investigation. It is also monitored in ovarian cancer follow-up. In perimenopause, fibroid degeneration and adenomyosis can elevate it.",
-    low: "Below 35 U/mL: normal. Note: normal CA-125 does not exclude endometriosis.",
-    high: "Above 35 U/mL: requires clinical correlation. Non-specific, but significant in symptomatic women.",
-    evidence: "moderate" },
+  // ── Específicos reprodutivos ─────────────────────────────────────────────
+  "CA-125": { measures: "Antígeno tumoral 125 (CA-125), glicoproteína produzida por células epiteliais. Elevado em endometriose, cistos ovarianos e alguns cânceres.",
+    female_context: "CA-125 não é diagnóstico isolado para endometriose. Tem 50 a 60% de sensibilidade e costuma ser normal em doença leve. Entretanto, CA-125 acima de 35 U/mL em mulher com dor pélvica, dismenorreia ou dispareunia profunda é clinicamente relevante e merece investigação adicional. Também é acompanhado no seguimento do câncer de ovário. No climatério, degeneração de miomas e adenomiose podem elevá-lo.",
+    low: "Abaixo de 35 U/mL: normal. Atenção: CA-125 normal não exclui endometriose.",
+    high: "Acima de 35 U/mL: exige correlação clínica. Não específico, mas relevante em mulheres sintomáticas.",
+    evidence: "moderada" },
 
-  // ── Bone & minerals ──────────────────────────────────────────────────────
-  "CALCIUM": { measures: "Total circulating calcium, critical for bone density, nerve function, and muscle contraction.",
-    female_context: "Calcium metabolism is oestrogen-dependent. As oestrogen declines in perimenopause and menopause, bone resorption accelerates, raising serum calcium slightly while depleting skeletal stores. Interpret always alongside Vitamin D and PTH. Hypocalcaemia can mimic anxiety and tetany.",
-    low: "Below 2.2 mmol/L: hypocalcaemia. Causes muscle cramps, tingling, anxiety, poor sleep.",
-    high: "Above 2.6 mmol/L: hypercalcaemia. Check parathyroid hormone (PTH). Can indicate primary hyperparathyroidism.",
-    evidence: "strong" },
+  // ── Ossos e minerais ─────────────────────────────────────────────────────
+  "CALCIUM": { measures: "Cálcio circulante total, crítico para densidade óssea, função nervosa e contração muscular.",
+    female_context: "O metabolismo do cálcio depende do estrogênio. Conforme o estrogênio cai no climatério e na menopausa, a reabsorção óssea acelera, elevando levemente o cálcio sérico enquanto esgota os estoques esqueléticos. Sempre interprete com vitamina D e PTH. Hipocalcemia pode simular ansiedade e tetania.",
+    low: "Abaixo de 8,8 mg/dL: hipocalcemia. Causa cãibras musculares, formigamento, ansiedade, sono ruim.",
+    high: "Acima de 10,4 mg/dL: hipercalcemia. Verifique o paratormônio (PTH). Pode indicar hiperparatireoidismo primário.",
+    evidence: "forte" },
 
-  "ALP": { measures: "Alkaline phosphatase, an enzyme found in bone, liver, and bile ducts; elevated with bone turnover or liver disease.",
-    female_context: "Bone-specific ALP is a marker of osteoblast activity; it rises when bone is rebuilding after loss. Elevated ALP in a menopausal woman without liver disease may reflect accelerated bone turnover. Also elevated in pregnancy (placental ALP). Interpret with calcium, Vitamin D and liver enzymes.",
-    low: "Below 30 U/L: may indicate zinc deficiency or hypothyroidism.",
-    high: "Above 120 U/L: investigate bone or liver source. In menopause context, bone-specific fractionation helps.",
-    evidence: "moderate" },
+  "ALP": { measures: "Fosfatase Alcalina (FA), enzima encontrada em osso, fígado e ductos biliares. Elevada com aumento de turnover ósseo ou doença hepática.",
+    female_context: "A FA ósseo-específica é marcador de atividade osteoblástica. Sobe quando o osso está se reconstruindo após perda. FA elevada em mulher na menopausa sem doença hepática pode refletir turnover ósseo acelerado. Também elevada na gestação (FA placentária). Interprete com cálcio, vitamina D e enzimas hepáticas.",
+    low: "Abaixo de 30 U/L: pode indicar deficiência de zinco ou hipotireoidismo.",
+    high: "Acima de 120 U/L: investigue origem óssea ou hepática. No contexto da menopausa, o fracionamento ósseo-específico ajuda.",
+    evidence: "moderada" },
 
-  "PHOSPHORUS": { measures: "Inorganic phosphate, tightly coupled with calcium in bone metabolism and energy production.",
-    female_context: "Rarely abnormal in isolation, but low phosphorus with normal calcium suggests renal phosphate wasting or malabsorption. High phosphorus with high calcium points toward hyperparathyroidism. Relevant to bone health assessment in perimenopause.",
-    low: "Below 0.8 mmol/L: weakness, bone pain, impaired red cell function.",
-    high: "Above 1.5 mmol/L: may indicate kidney dysfunction or excessive dairy/phosphate intake.",
-    evidence: "moderate" },
+  "PHOSPHORUS": { measures: "Fósforo inorgânico, fortemente acoplado ao cálcio no metabolismo ósseo e na produção de energia.",
+    female_context: "Raramente alterado isoladamente, mas fósforo baixo com cálcio normal sugere perda renal de fosfato ou má absorção. Fósforo alto com cálcio alto aponta para hiperparatireoidismo. Relevante na avaliação da saúde óssea no climatério.",
+    low: "Abaixo de 2,5 mg/dL: fraqueza, dor óssea, função prejudicada das hemácias.",
+    high: "Acima de 4,7 mg/dL: pode indicar disfunção renal ou ingestão excessiva de lácteos e fósforo.",
+    evidence: "moderada" },
 
-  // ── Haematology ───────────────────────────────────────────────────────────
-  "HEMOGLOBIN": { measures: "The oxygen-carrying protein in red blood cells; the primary marker of anaemia.",
-    female_context: "Iron-deficiency anaemia is the most common nutritional deficiency in women worldwide, driven by menstrual loss. Critically, symptoms of iron deficiency (fatigue, brain fog, hair loss, exercise intolerance) appear when ferritin is low but haemoglobin is still normal. Haemoglobin is a late marker; ferritin is the early warning signal. Endometriosis and fibroids increase blood loss significantly.",
-    low: "Below 120 g/L in women: anaemia. Below 80 g/L: severe anaemia requiring urgent evaluation.",
-    high: "Above 160 g/L: haemoconcentration, dehydration, or polycythaemia.",
-    evidence: "strong" },
+  // ── Hematologia ──────────────────────────────────────────────────────────
+  "HEMOGLOBIN": { measures: "Proteína transportadora de oxigênio nas hemácias. Principal marcador de anemia.",
+    female_context: "A anemia ferropriva é a deficiência nutricional mais comum em mulheres no mundo, causada pela perda menstrual. Importante: sintomas de deficiência de ferro (fadiga, nevoeiro mental, queda de cabelo, intolerância ao exercício) aparecem quando a ferritina está baixa, mas a hemoglobina ainda está normal. A hemoglobina é um marcador tardio. A ferritina é o sinal de alerta precoce. Endometriose e miomas aumentam significativamente a perda sanguínea.",
+    low: "Abaixo de 12 g/dL em mulheres: anemia. Abaixo de 8 g/dL: anemia grave que exige avaliação urgente.",
+    high: "Acima de 16 g/dL: hemoconcentração, desidratação ou policitemia.",
+    evidence: "forte" },
 
-  "HAEMATOCRIT": { measures: "The percentage of blood volume occupied by red blood cells.",
-    female_context: "Parallels haemoglobin findings. Useful as a ratio check alongside haemoglobin. Low haematocrit with normal MCV suggests recent acute blood loss; low with low MCV suggests chronic iron deficiency.",
-    low: "Below 36% in women: suggests anaemia.",
-    high: "Above 47%: haemoconcentration or polycythaemia.",
-    evidence: "strong" },
+  "HAEMATOCRIT": { measures: "Porcentagem do volume sanguíneo ocupada pelas hemácias.",
+    female_context: "Acompanha os achados da hemoglobina. Útil como verificação ao lado da hemoglobina. Hematócrito baixo com VCM normal sugere perda aguda recente. Hematócrito baixo com VCM baixo sugere deficiência de ferro crônica.",
+    low: "Abaixo de 36% em mulheres: sugere anemia.",
+    high: "Acima de 47%: hemoconcentração ou policitemia.",
+    evidence: "forte" },
 
-  "MCV": { measures: "Mean corpuscular volume, the average size of red blood cells.",
-    female_context: "Small red cells (low MCV) point to iron deficiency or thalassaemia. Large red cells (high MCV) point to B12 or folate deficiency. Both patterns are common in women with heavy periods or restrictive eating. MCV combined with ferritin and B12 is more informative than any single marker alone.",
-    low: "Below 80 fL: microcytic anaemia. Iron deficiency is the most common cause in women.",
-    high: "Above 100 fL: macrocytic anaemia. Check B12, folate, and thyroid.",
-    evidence: "strong" },
+  "MCV": { measures: "Volume Corpuscular Médio (VCM), tamanho médio das hemácias.",
+    female_context: "Hemácias pequenas (VCM baixo) apontam para deficiência de ferro ou talassemia. Hemácias grandes (VCM alto) apontam para deficiência de B12 ou folato. Os dois padrões são comuns em mulheres com menstruações intensas ou alimentação restritiva. VCM combinado com ferritina e B12 é mais informativo do que qualquer marcador isolado.",
+    low: "Abaixo de 80 fL: anemia microcítica. Deficiência de ferro é a causa mais comum em mulheres.",
+    high: "Acima de 100 fL: anemia macrocítica. Verifique B12, folato e tireoide.",
+    evidence: "forte" },
 
-  // ── Nutritional (extended) ───────────────────────────────────────────────
-  "MAGNESIUM": { measures: "An intracellular mineral involved in over 300 enzymatic reactions, including energy production and muscle relaxation.",
-    female_context: "Magnesium deficiency is extremely common in women and frequently missed because serum magnesium is a poor indicator of intracellular stores (most magnesium is inside cells). Depleted by stress, alcohol, high sugar intake, and oral contraceptives. Clinically relevant for PMS severity, sleep quality, muscle cramps, anxiety, migraine frequency, and insulin resistance in PCOS.",
-    low: "Below 0.7 mmol/L: deficiency. Symptoms include muscle cramps, poor sleep, anxiety, constipation, PMS worsening.",
-    high: "Above 1.1 mmol/L: rare unless supplementing excessively or kidney impairment.",
-    evidence: "moderate" },
+  // ── Nutricionais (estendido) ─────────────────────────────────────────────
+  "MAGNESIUM": { measures: "Mineral intracelular envolvido em mais de 300 reações enzimáticas, incluindo produção de energia e relaxamento muscular.",
+    female_context: "Deficiência de magnésio é extremamente comum em mulheres, e frequentemente passa despercebida porque o magnésio sérico é indicador ruim dos estoques intracelulares (a maior parte do magnésio fica dentro das células). Reduzido por estresse, álcool, alta ingestão de açúcar e contraceptivos orais. Clinicamente relevante para intensidade da TPM, qualidade do sono, cãibras musculares, ansiedade, frequência de enxaqueca e resistência à insulina na SOP.",
+    low: "Abaixo de 1,7 mg/dL: deficiência. Sintomas incluem cãibras musculares, sono ruim, ansiedade, constipação, piora da TPM.",
+    high: "Acima de 2,7 mg/dL: rara, exceto em suplementação excessiva ou disfunção renal.",
+    evidence: "moderada" },
 
-  "ZINC": { measures: "A trace mineral essential for immune function, DNA repair, hormone synthesis and ovulation.",
-    female_context: "Zinc is required for FSH receptor sensitivity and follicular development. Deficiency impairs thyroid hormone conversion and raises reverse T3. Low zinc is common in women eating plant-heavy diets (phytates block absorption) and in those on hormonal contraception. Important for wound healing, immune defence, and skin integrity.",
-    low: "Below 10 μmol/L: deficiency. Associated with hair loss, impaired immunity, poor wound healing, subfertility.",
-    high: "Above 23 μmol/L: rare; excess zinc competitively inhibits copper absorption.",
-    evidence: "moderate" },
+  "ZINC": { measures: "Mineral traço essencial para função imunológica, reparo de DNA, síntese hormonal e ovulação.",
+    female_context: "O zinco é necessário para sensibilidade do receptor de FSH e desenvolvimento folicular. A deficiência prejudica a conversão de hormônios tireoidianos e eleva o T3 reverso. Zinco baixo é comum em mulheres com dietas predominantemente vegetais (fitatos bloqueiam a absorção) e nas que usam contracepção hormonal. Importante para cicatrização, defesa imunológica e integridade da pele.",
+    low: "Abaixo de 65 µg/dL: deficiência. Associada a queda de cabelo, imunidade prejudicada, cicatrização ruim, subfertilidade.",
+    high: "Acima de 150 µg/dL: rara. Excesso de zinco inibe competitivamente a absorção de cobre.",
+    evidence: "moderada" },
 
-  "VITAMIN B6": { measures: "Pyridoxine, involved in neurotransmitter synthesis, hormone metabolism, and immune function.",
-    female_context: "B6 is co-factor in oestrogen and progesterone metabolism and in serotonin/dopamine synthesis. Deficiency worsens PMS mood symptoms, nausea in pregnancy, and depression. Depleted by oral contraceptives (OCP use can halve B6 levels). Important in the context of PCOS and perimenopausal mood changes.",
-    low: "Below 20 nmol/L: deficiency. Causes depression, PMS, peripheral neuropathy, impaired immunity.",
-    high: "Above 200 nmol/L from supplementation: peripheral neuropathy risk. B6 toxicity is real at high doses.",
-    evidence: "moderate" },
+  "VITAMIN B6": { measures: "Piridoxina, envolvida na síntese de neurotransmissores, no metabolismo hormonal e na função imunológica.",
+    female_context: "A B6 é cofator no metabolismo de estrogênio e progesterona e na síntese de serotonina e dopamina. A deficiência piora os sintomas de humor da TPM, a náusea na gestação e a depressão. Reduzida por contraceptivos orais (o uso de ACO pode reduzir a B6 pela metade). Importante no contexto da SOP e das mudanças de humor no climatério.",
+    low: "Abaixo de 5 ng/mL: deficiência. Causa depressão, TPM, neuropatia periférica, imunidade prejudicada.",
+    high: "Acima de 50 ng/mL por suplementação: risco de neuropatia periférica. Toxicidade da B6 é real em doses altas.",
+    evidence: "moderada" },
 
-  "HOMOCYSTEINE": { measures: "An amino acid produced during methionine metabolism; elevated levels damage blood vessel walls.",
-    female_context: "Elevated homocysteine is an independent cardiovascular risk factor that rises at menopause as oestrogen falls. Also linked to recurrent miscarriage, neural tube defects, and cognitive decline. Driven by low B12, B6, folate, and MTHFR gene variants. Normalises with targeted B-vitamin supplementation. Often missed in routine panels.",
-    low: "Below 7 μmol/L: optimal.",
-    high: "Above 10 μmol/L: moderately elevated. Above 15 μmol/L: significantly elevated. Check B12, folate, B6.",
-    evidence: "strong" },
+  "HOMOCYSTEINE": { measures: "Aminoácido produzido durante o metabolismo da metionina. Níveis elevados danificam as paredes dos vasos sanguíneos.",
+    female_context: "Homocisteína elevada é fator independente de risco cardiovascular que sobe na menopausa, conforme o estrogênio cai. Também associada a perda gestacional recorrente, defeitos do tubo neural e declínio cognitivo. Causada por B12, B6 e folato baixos, e por variantes do gene MTHFR. Normaliza com suplementação direcionada de vitaminas do complexo B. Frequentemente omitida em painéis de rotina.",
+    low: "Abaixo de 7 µmol/L: ideal.",
+    high: "Acima de 10 µmol/L: moderadamente elevada. Acima de 15 µmol/L: significativamente elevada. Verifique B12, folato, B6.",
+    evidence: "forte" },
 
-  "OMEGA-3 INDEX": { measures: "The percentage of EPA and DHA omega-3 fatty acids in red blood cell membranes, reflecting long-term intake.",
-    female_context: "Anti-inflammatory omega-3 fatty acids are directly relevant to endometriosis (lesion-driven inflammation), PCOS (insulin sensitivity), perimenopause (mood, cardiovascular), and pregnancy outcomes. An index below 4% is associated with elevated cardiovascular risk; above 8% is protective. Most Western diets sit at 4–5%.",
-    low: "Below 4%: high cardiovascular and inflammatory risk.",
-    high: "Above 8%: optimal anti-inflammatory status.",
-    evidence: "moderate" },
+  "OMEGA-3 INDEX": { measures: "Porcentagem dos ácidos graxos ômega-3 EPA e DHA nas membranas das hemácias. Reflete a ingestão de longo prazo.",
+    female_context: "Os ômega-3 anti-inflamatórios são diretamente relevantes para endometriose (inflamação das lesões), SOP (sensibilidade à insulina), climatério (humor, cardiovascular) e desfechos gestacionais. Índice abaixo de 4% associa-se a risco cardiovascular elevado. Acima de 8% é protetor. A maioria das dietas ocidentais fica entre 4 e 5%.",
+    low: "Abaixo de 4%: risco cardiovascular e inflamatório alto.",
+    high: "Acima de 8%: status anti-inflamatório ideal.",
+    evidence: "moderada" },
 
-  "SELENIUM": { measures: "A trace mineral essential for thyroid hormone activation and antioxidant defence.",
-    female_context: "Selenium is required to convert T4 to active T3. Deficiency impairs thyroid function and worsens Hashimoto's autoimmunity. Selenium supplementation (200 μg/day) reduces Anti-TPO antibody titres in women with Hashimoto's. Also protective against postpartum thyroiditis. Soil depletion means dietary intake is unreliable across Europe.",
-    low: "Below 80 μg/L: deficiency. Worsens Hashimoto's, impairs thyroid conversion.",
-    high: "Above 200 μg/L: selenosis risk; hair loss, nail changes, garlic breath.",
-    evidence: "moderate" },
+  "SELENIUM": { measures: "Mineral traço essencial para ativação dos hormônios tireoidianos e defesa antioxidante.",
+    female_context: "O selênio é necessário para converter T4 em T3 ativo. A deficiência prejudica a função tireoidiana e piora a autoimunidade de Hashimoto. A suplementação de selênio (200 µg/dia) reduz os títulos de anti-TPO em mulheres com Hashimoto. Também protetora contra tireoidite pós-parto. A depleção do solo torna a ingestão dietética pouco confiável em várias regiões.",
+    low: "Abaixo de 80 µg/L: deficiência. Piora Hashimoto, prejudica a conversão tireoidiana.",
+    high: "Acima de 200 µg/L: risco de selenose. Queda de cabelo, alterações nas unhas, hálito de alho.",
+    evidence: "moderada" },
 };
 
 function lookupInterp(marker) {
@@ -796,27 +797,27 @@ function buildFallbackSummary(tests) {
   const key = outOfRange.slice(0, 3).map((m) => `${m.marker} (${m.value} ${m.unit || ""})`.trim());
   const base = {
     headline: outOfRange.length
-      ? `${outOfRange.length} lab test${outOfRange.length > 1 ? "s are" : " is"} out of range in this report.`
-      : "No lab tests are clearly out of range in this report.",
-    key_points: key.length ? key : ["Most values are within the stated lab ranges."],
+      ? `${outOfRange.length} marcador${outOfRange.length > 1 ? "es estão" : " está"} fora da faixa neste exame.`
+      : "Nenhum marcador está claramente fora da faixa neste exame.",
+    key_points: key.length ? key : ["A maior parte dos valores está dentro das faixas indicadas pelo laboratório."],
     discuss_with_gp: [
-      "Review trends against your previous lab results, not only this single snapshot.",
-      "Confirm whether sample timing (cycle day, fasting, medications) could affect interpretation.",
-      "Discuss symptoms together with these values before changing treatment or supplements.",
+      "Revise as tendências em relação aos seus exames anteriores, não apenas este recorte isolado.",
+      "Confirme se o momento da coleta (dia do ciclo, jejum, medicações) pode afetar a interpretação.",
+      "Converse sobre seus sintomas junto com esses valores antes de mudar tratamento ou suplementos.",
     ],
     next_steps: borderline.length
-      ? [`Recheck borderline lab tests: ${borderline.slice(0, 4).map((m) => m.marker).join(", ")}.`]
-      : ["Repeat key lab tests at the clinically appropriate interval if symptoms persist."],
+      ? [`Repita os marcadores no limite: ${borderline.slice(0, 4).map((m) => m.marker).join(", ")}.`]
+      : ["Repita os marcadores principais no intervalo clinicamente adequado se os sintomas persistirem."],
     reassurance:
-      "This summary is educational and should support, not replace, clinical advice from your GP or specialist.",
+      "Este resumo é educacional e deve apoiar, não substituir, a orientação clínica da sua médica ou especialista.",
   };
   const womenFocus = {
-    headline: "Women’s-health focus: prioritise hormone, thyroid, iron and metabolic signals in this report.",
+    headline: "Foco em saúde da mulher: priorize os sinais hormonais, tireoidianos, de ferro e metabólicos deste exame.",
     key_points: [
-      "Look first at cycle/reproductive tests (e.g. LH, FSH, estradiol, progesterone, AMH) when available.",
-      "Thyroid markers (TSH, Free T4/T3, antibodies) can affect cycle quality, fertility and energy.",
-      "Ferritin/iron and B12/folate often explain fatigue, hair shedding and cognitive symptoms in women.",
-      "Glucose/insulin/lipids can reveal early metabolic strain, including patterns relevant to PCOS and perimenopause.",
+      "Olhe primeiro para os marcadores do ciclo e reprodutivos (LH, FSH, estradiol, progesterona, HAM) quando disponíveis.",
+      "Marcadores tireoidianos (TSH, T4 e T3 livres, anticorpos) podem afetar qualidade do ciclo, fertilidade e energia.",
+      "Ferritina, ferro, B12 e folato costumam explicar fadiga, queda de cabelo e sintomas cognitivos em mulheres.",
+      "Glicose, insulina e lipídios podem revelar sobrecarga metabólica precoce, inclusive padrões relevantes para SOP e climatério.",
     ],
     discuss_with_gp: base.discuss_with_gp,
     next_steps: base.next_steps,
@@ -895,18 +896,18 @@ function UpgradeModal({ onClose }) {
           margin: "0 0 0.35rem", textAlign: "center",
           fontFamily: "Playfair Display, serif", fontSize: "1.35rem",
           color: "#8B1A4A",
-        }}>You've used your free decode this month</h2>
+        }}>Você já usou sua decifração gratuita deste mês</h2>
 
         <p style={{ textAlign: "center", color: "#666", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
-          Upgrade to Decode Pro for unlimited decodes, every month.
+          Assine o Decifra Pro para ter decifrações ilimitadas todos os meses.
         </p>
 
         <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.5rem", fontSize: "0.875rem", color: "#444" }}>
           {[
-            "Unlimited lab decodes every month",
-            "Female-specific context on every marker",
-            "PDF & JSON download after every decode",
-            "Priority support",
+            "Decifrações ilimitadas todos os meses",
+            "Contexto feminino para cada marcador",
+            "Download em PDF e JSON após cada decifração",
+            "Suporte prioritário",
           ].map((b) => (
             <li key={b} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", marginBottom: "0.5rem" }}>
               <span style={{ marginTop: "2px", flexShrink: 0 }}><IcCheck size={13} color="#8B1A4A"/></span>
@@ -930,7 +931,7 @@ function UpgradeModal({ onClose }) {
             marginBottom: "0.6rem", transition: "background 0.2s",
           }}
         >
-          {loading ? "Redirecting to Stripe…" : "Upgrade to Pro · €7.99/month"}
+          {loading ? "Redirecionando ao Stripe…" : "Assinar Pro · €7,99/mês" /* TODO: BRL pricing pending Stripe BR setup */}
         </button>
 
         <button
@@ -944,7 +945,7 @@ function UpgradeModal({ onClose }) {
             marginBottom: "1rem",
           }}
         >
-          Annual plan · €59/year (save €37)
+          Plano anual · €59/ano (economize €37) {/* TODO: BRL pricing pending Stripe BR setup */}
         </button>
 
         <button
@@ -954,7 +955,7 @@ function UpgradeModal({ onClose }) {
             color: "#999", fontSize: "0.8rem", cursor: "pointer", textDecoration: "underline",
           }}
         >
-          Come back next month (free tier resets automatically)
+          Volte no mês que vem (a cota gratuita reseta automaticamente)
         </button>
       </div>
     </div>
@@ -976,7 +977,7 @@ function ProToast({ onDone }) {
       display: "flex", alignItems: "center", gap: "0.6rem",
     }}>
       <span>🎉</span>
-      <span>Pro unlocked! Unlimited decodes activated.</span>
+      <span>Pro liberado! Decifrações ilimitadas ativadas.</span>
     </div>
   );
 }
@@ -1200,15 +1201,24 @@ function App() {
 
   const go = (r) => setRoute(r);
 
-  const startDecode = async (text, name) => {
+  const startDecode = async (payload, name) => {
+    // Accept legacy string payload (text only) or new object payload { text, images }.
+    const input = typeof payload === "string" ? { text: payload, images: [] } : (payload || { text: "", images: [] });
+    const text = input.text || "";
+    const images = Array.isArray(input.images) ? input.images : [];
     setReportText(text);
     setReportName(name || reportName);
     setRoute("decode");
     setErrorMsg("");
-    if (text.length > MAX_EXTRACT_CHARS) {
+    if (!text && images.length === 0) {
+      setDecodeStage("error");
+      setErrorMsg("Envie um arquivo, foto do laudo, ou cole o texto do exame.");
+      return;
+    }
+    if (text && text.length > MAX_EXTRACT_CHARS) {
       setDecodeStage("error");
       setErrorMsg(
-        `Report is too long (${text.length.toLocaleString()} characters). Maximum is ${MAX_EXTRACT_CHARS.toLocaleString()} — try one lab panel at a time, or paste only the results block.`
+        `O laudo está longo demais (${text.length.toLocaleString()} caracteres). O limite é ${MAX_EXTRACT_CHARS.toLocaleString()}. Tente um painel laboratorial por vez, ou cole apenas o bloco de resultados.`
       );
       return;
     }
@@ -1216,10 +1226,16 @@ function App() {
     try {
       let out;
       try {
-        out = await extractWithClaude(text);
+        out = await extractWithClaude(text, images);
       } catch (e) {
         console.warn("[Decifra] Falha na extração via Claude, voltando para regex:", e.message);
-        out = regexExtract(text);
+        // Regex fallback only works on text; image-only inputs surface the error.
+        out = text ? regexExtract(text) : { results: [], not_found_markers: [] };
+        if (!text) {
+          setDecodeStage("error");
+          setErrorMsg("Não foi possível ler a(s) foto(s) do laudo. Tente novamente com uma imagem mais nítida, ou cole o texto manualmente.");
+          return;
+        }
       }
       const results = (out.results || []).map((r) => ({
         marker: String(r.marker || "").trim(),
@@ -1317,7 +1333,7 @@ function App() {
         : <>
             <TopBar route={route} go={go} userEmail={userEmail} isPro={isPro} onSignOut={handleSignOut} onSignUp={() => go("signup")} />
             <main className="main" id="main-content" tabIndex={-1}>
-              {route === "home" && <Home go={go} onUseSample={() => startDecode(SAMPLE_REPORT, "Sample Lab Report 2026-04-11")} />}
+              {route === "home" && <Home go={go} onUseSample={() => startDecode(SAMPLE_REPORT, "Exame laboratorial exemplo 2026-04-11")} />}
               {route === "decode" && (
                 <Decode
                   stage={decodeStage}
@@ -1415,7 +1431,7 @@ function TopBar({ route, go, userEmail, isPro, onSignOut, onSignUp }) {
             <span className="free-badge" title="Todos os recursos são gratuitos durante a beta">Grátis</span>
           )}
         </div>
-        <nav className="nav" aria-label="Primary">
+        <nav className="nav" aria-label="Navegação principal">
           {items.map((it) => (
             <button
               key={it.id}
@@ -1428,7 +1444,7 @@ function TopBar({ route, go, userEmail, isPro, onSignOut, onSignUp }) {
             </button>
           ))}
         </nav>
-        <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Open menu" aria-expanded={menuOpen}>
+        <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Abrir menu" aria-expanded={menuOpen}>
           <span/><span/><span/>
         </button>
         {menuOpen && (
@@ -1684,27 +1700,28 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const submit = async () => {
-    if (!valid) { setErr("Enter a valid email to continue."); return; }
-    if (mode === "signup" && !consent) { setErr("Please agree to the Privacy Policy to continue."); return; }
+    if (!valid) { setErr("Informe um e-mail válido para continuar."); return; }
+    if (mode === "signup" && !consent) { setErr("Concorde com a Política de Privacidade para continuar."); return; }
     setLoading(true);
     setErr("");
     await onUnlock(email, mode === "signin" ? "free" : plan);
     setLoading(false);
   };
 
-  // plans shown — if limit already hit, free plan is removed
+  // plans shown. If limit already hit, free plan is removed.
+  // TODO: BRL pricing pending Stripe BR setup. Prices left in EUR placeholder.
   const plans = [
     ...(!limitHit ? [{
-      id: "free", label: "Free", price: "€0", cycle: "/ month",
-      note: "1 decode per month",
-      cta: "Unlock free report",
+      id: "free", label: "Grátis", price: "€0", cycle: "/ mês",
+      note: "1 decifração por mês",
+      cta: "Liberar laudo grátis",
     }] : []),
-    { id: "monthly", label: "Pro", price: "€7.99", cycle: "/ month",
-      note: "Unlimited decodes · all markers · priority",
-      cta: "Unlock with Pro · €7.99/mo", highlight: true },
-    { id: "annual", label: "Pro Annual", price: "€59", cycle: "/ year",
-      note: "Best value, 2 months free",
-      cta: "Unlock with Pro · €59/yr", badge: "Save €37" },
+    { id: "monthly", label: "Pro", price: "€7,99", cycle: "/ mês",
+      note: "Decifrações ilimitadas · todos os marcadores · prioridade",
+      cta: "Liberar com Pro · €7,99/mês", highlight: true },
+    { id: "annual", label: "Pro Anual", price: "€59", cycle: "/ ano",
+      note: "Melhor custo. 2 meses grátis.",
+      cta: "Liberar com Pro · €59/ano", badge: "Economize €37" },
   ];
 
   return (
@@ -1726,13 +1743,13 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
             color: "#1a0a10", margin: "0 0 0.5rem", lineHeight: 1.3,
           }}>
             {limitHit
-              ? "You've used your free decode this month"
-              : "Unlock your full lab interpretation"}
+              ? "Você já usou sua decifração gratuita deste mês"
+              : "Libere a interpretação completa do seu laudo"}
           </h2>
           <p style={{ color: "#777", fontSize: "0.85rem", margin: 0, lineHeight: 1.5 }}>
             {limitHit
-              ? `Upgrade to Pro for unlimited decodes, or come back next month.`
-              : `Your report has ${extracted.length} lab tests. We found ${lockedCount > 0 ? `${lockedCount} more` : "results"}. Save your report and see everything now.`}
+              ? `Assine o Pro para decifrações ilimitadas, ou volte no mês que vem.`
+              : `Seu laudo tem ${extracted.length} marcadores. Encontramos ${lockedCount > 0 ? `mais ${lockedCount}` : "os resultados"}. Salve seu laudo e veja tudo agora.`}
           </p>
         </div>
 
@@ -1746,11 +1763,11 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
             <IcLock size={22} color="#8B1A4A"/>
             <div>
               <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#8B1A4A" }}>
-                {lockedCount} lab test{lockedCount !== 1 ? "s" : ""} + female-specific context locked
+                {lockedCount} marcador{lockedCount !== 1 ? "es" : ""} + contexto feminino bloqueado{lockedCount !== 1 ? "s" : ""}
               </div>
               <div style={{ fontSize: "0.78rem", color: "#999", marginTop: "0.1rem" }}>
                 {extracted.slice(PREVIEW_COUNT).map(m => m.marker).slice(0, 4).join(" · ")}
-                {lockedCount > 4 ? ` · +${lockedCount - 4} more` : ""}
+                {lockedCount > 4 ? ` · +${lockedCount - 4} mais` : ""}
               </div>
             </div>
           </div>
@@ -1758,7 +1775,7 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
 
         {/* Mode toggle tabs */}
         <div style={{ display: "flex", borderRadius: "0.6rem", background: "#f5eff5", padding: "3px", marginBottom: "1.25rem", gap: "3px" }}>
-          {[["signup", "Create account"], ["signin", "Sign in"]].map(([m, label]) => (
+          {[["signup", "Criar conta"], ["signin", "Entrar"]].map(([m, label]) => (
             <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{
               flex: 1, padding: "0.45rem", border: "none", borderRadius: "0.45rem",
               background: mode === m ? "#fff" : "transparent",
@@ -1775,10 +1792,10 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
         {!prefillEmail && (
           <div style={{ marginBottom: "1rem" }}>
             <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#555", marginBottom: "0.35rem" }}>
-              Your email
+              Seu e-mail
             </label>
             <input
-              type="email" placeholder="you@example.com" value={email}
+              type="email" placeholder="voce@exemplo.com" value={email}
               onChange={(e) => { setEmail(e.target.value); setErr(""); }}
               onKeyDown={(e) => e.key === "Enter" && submit()}
               style={{
@@ -1793,7 +1810,7 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
         {/* Sign-in helper text */}
         {mode === "signin" && (
           <p style={{ fontSize: "0.8rem", color: "#888", marginBottom: "1rem", lineHeight: 1.5 }}>
-            Enter the email you used to sign up. If you have a Pro account it will be restored automatically.
+            Use o e-mail com que você se cadastrou. Se você tem uma conta Pro, ela será restaurada automaticamente.
           </p>
         )}
 
@@ -1833,13 +1850,13 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
           </div>
         )}
 
-        {/* GDPR consent — signup only */}
+        {/* LGPD consent. Signup only. */}
         {mode === "signup" && (
           <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "1rem", cursor: "pointer" }}>
             <input type="checkbox" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErr(""); }}
               style={{ marginTop: "3px", accentColor: "#8B1A4A", flexShrink: 0 }} />
             <span style={{ fontSize: "0.72rem", color: "#999", lineHeight: 1.5 }}>
-              I agree to the Privacy Policy. Decode stores only your email and subscription tier. No lab data is stored.
+              Concordo com a Política de Privacidade. A Decifra armazena apenas seu e-mail e o plano da assinatura. Nenhum dado de exame é guardado.
             </span>
           </label>
         )}
@@ -1853,7 +1870,7 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
           cursor: loading ? "not-allowed" : "pointer",
           marginBottom: "0.85rem",
         }}>
-          {loading ? "One moment…" : mode === "signin" ? "Sign in and unlock" : (plans.find(p => p.id === plan)?.cta || "Unlock report")}
+          {loading ? "Um instante…" : mode === "signin" ? "Entrar e liberar" : (plans.find(p => p.id === plan)?.cta || "Liberar laudo")}
         </button>
 
         {/* Trust row */}
@@ -1861,7 +1878,7 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
           display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap",
           fontSize: "0.7rem", color: "#bbb",
         }}>
-          {["No diagnosis", "Your data stays yours", "Cancel anytime"].map(t => (
+          {["Não diagnostica", "Seus dados são seus", "Cancele quando quiser"].map(t => (
             <span key={t}>{t}</span>
           ))}
         </div>
@@ -1881,10 +1898,10 @@ function ResultPreview({ extracted, onUnlock, userEmail, limitHit }) {
       {/* Visible markers */}
       <div className="page complete" style={{ paddingBottom: 0 }}>
         <div className="card complete-card" style={{ maxWidth: "640px", margin: "0 auto" }}>
-          <div className="eyebrow">Extraction complete · {extracted.length} lab test{extracted.length !== 1 ? "s" : ""} found</div>
-          <h1 className="h1" style={{ marginBottom: "0.5rem" }}>Your results are ready</h1>
+          <div className="eyebrow">Extração concluída · {extracted.length} marcador{extracted.length !== 1 ? "es" : ""} encontrado{extracted.length !== 1 ? "s" : ""}</div>
+          <h1 className="h1" style={{ marginBottom: "0.5rem" }}>Seus resultados estão prontos</h1>
           <p className="sub" style={{ marginBottom: "1.5rem" }}>
-            Showing {visible.length} of {extracted.length} lab tests. Unlock to see the full female-specific interpretation.
+            Mostrando {visible.length} de {extracted.length} marcadores. Libere para ver a interpretação feminina completa.
           </p>
 
           {/* Preview rows — visible */}
@@ -1928,14 +1945,14 @@ function ResultPreview({ extracted, onUnlock, userEmail, limitHit }) {
                     <div style={{
                       padding: "0.2rem 0.6rem", borderRadius: "999px",
                       background: "#e8d5df", fontSize: "0.7rem", fontWeight: 700, color: "#8B1A4A",
-                    }}>locked</div>
+                    }}>bloqueado</div>
                   </div>
                 ))}
                 {locked.length > 3 && (
                   <div style={{
                     textAlign: "center", fontSize: "0.8rem", color: "#aaa",
                     padding: "0.5rem",
-                  }}>+ {locked.length - 3} more lab tests</div>
+                  }}>+ {locked.length - 3} marcadores</div>
                 )}
               </div>
               {/* Fade overlay */}
@@ -1973,7 +1990,7 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
   const [signinDone, setSigninDone] = React.useState(false);
 
   const handleSignIn = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signinEmail)) { setErr("Please enter a valid email."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signinEmail)) { setErr("Informe um e-mail válido."); return; }
     setLoading(true); setErr("");
     await onSignUp(signinEmail, "free");
     setLoading(false); setSigninDone(true);
@@ -1982,8 +1999,8 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const submit = async () => {
-    if (!valid) { setErr("Please enter a valid email address."); return; }
-    if (!consent) { setErr("Please agree to the Privacy Policy to continue."); return; }
+    if (!valid) { setErr("Informe um e-mail válido."); return; }
+    if (!consent) { setErr("Concorde com a Política de Privacidade para continuar."); return; }
     setLoading(true);
     setErr("");
     await onSignUp(email, plan);
@@ -1991,33 +2008,34 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
     if (plan === "free") setDone(true);
   };
 
+  // TODO: BRL pricing pending Stripe BR setup. Prices left in EUR placeholder.
   const plans = [
     {
       id: "free",
-      label: "Free",
+      label: "Grátis",
       price: "€0",
-      cycle: "forever",
-      perks: ["1 decode per month", "Female-specific context", "18 biomarker interpretations"],
-      cta: "Get started free",
+      cycle: "para sempre",
+      perks: ["1 decifração por mês", "Contexto feminino em cada marcador", "18 biomarcadores interpretados"],
+      cta: "Começar grátis",
       highlight: false,
     },
     {
       id: "monthly",
-      label: "Pro Monthly",
-      price: "€7.99",
-      cycle: "/ month",
-      perks: ["Unlimited decodes", "Female-specific context", "18+ biomarker interpretations", "PDF & JSON download", "Priority support"],
-      cta: "Start Pro · €7.99/mo",
+      label: "Pro Mensal",
+      price: "€7,99",
+      cycle: "/ mês",
+      perks: ["Decifrações ilimitadas", "Contexto feminino em cada marcador", "Mais de 18 biomarcadores interpretados", "Download em PDF e JSON", "Suporte prioritário"],
+      cta: "Assinar Pro · €7,99/mês",
       highlight: true,
     },
     {
       id: "annual",
-      label: "Pro Annual",
+      label: "Pro Anual",
       price: "€59",
-      cycle: "/ year",
-      badge: "Save €37",
-      perks: ["Everything in Pro Monthly", "Best value, 2 months free", "Priority support"],
-      cta: "Start Pro · €59/yr",
+      cycle: "/ ano",
+      badge: "Economize €37",
+      perks: ["Tudo do Pro Mensal", "Melhor custo. 2 meses grátis.", "Suporte prioritário"],
+      cta: "Assinar Pro · €59/ano",
       highlight: false,
     },
   ];
@@ -2025,13 +2043,13 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
   if (mode === "signin") {
     return (
       <div style={{ minHeight: "100vh", background: "var(--c-paper, #F7F3EC)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1rem" }}>
-        <h1 style={{ fontFamily: "Playfair Display, serif", fontSize: "1.5rem", color: "#1a0a10", marginBottom: "0.4rem" }}>Welcome back</h1>
-        <p style={{ fontSize: "0.9rem", color: "#666", marginBottom: "1.75rem", textAlign: "center", maxWidth: 360 }}>Enter the email you signed up with. If you have a Pro account it will be restored automatically.</p>
+        <h1 style={{ fontFamily: "Playfair Display, serif", fontSize: "1.5rem", color: "#1a0a10", marginBottom: "0.4rem" }}>Bem-vinda de volta</h1>
+        <p style={{ fontSize: "0.9rem", color: "#666", marginBottom: "1.75rem", textAlign: "center", maxWidth: 360 }}>Use o e-mail com que você se cadastrou. Se você tem uma conta Pro, ela será restaurada automaticamente.</p>
         {signinDone
-          ? <p style={{ fontSize: "0.95rem", color: "#8B1A4A", fontWeight: 600 }}>You&rsquo;re signed in. You can close this and continue.</p>
+          ? <p style={{ fontSize: "0.95rem", color: "#8B1A4A", fontWeight: 600 }}>Você está conectada. Pode fechar e continuar.</p>
           : (
             <div style={{ width: "100%", maxWidth: "360px" }}>
-              <input type="email" placeholder="you@example.com" value={signinEmail}
+              <input type="email" placeholder="voce@exemplo.com" value={signinEmail}
                 onChange={(e) => { setSigninEmail(e.target.value); setErr(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
                 style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "0.6rem", border: "1.5px solid #d8cfc8", fontSize: "0.95rem", outline: "none", boxSizing: "border-box", background: "#fff", marginBottom: "0.75rem" }}
@@ -2039,12 +2057,12 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
               {err && <p style={{ color: "#c0392b", fontSize: "0.78rem", marginBottom: "0.5rem" }}>{err}</p>}
               <button onClick={handleSignIn} disabled={loading}
                 style={{ width: "100%", padding: "0.85rem", background: loading ? "#c9a0b9" : "#8B1A4A", color: "#fff", border: "none", borderRadius: "0.75rem", fontSize: "1rem", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}>
-                {loading ? "Checking…" : "Continue"}
+                {loading ? "Verificando…" : "Continuar"}
               </button>
             </div>
           )}
-        <button onClick={() => { setMode("signup"); setErr(""); }} style={{ marginTop: "1.25rem", background: "none", border: "none", color: "#aaa", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>Create a new account</button>
-        <button onClick={onBack} style={{ marginTop: "0.5rem", background: "none", border: "none", color: "#aaa", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>Back to home</button>
+        <button onClick={() => { setMode("signup"); setErr(""); }} style={{ marginTop: "1.25rem", background: "none", border: "none", color: "#aaa", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>Criar uma nova conta</button>
+        <button onClick={onBack} style={{ marginTop: "0.5rem", background: "none", border: "none", color: "#aaa", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>Voltar para o início</button>
       </div>
     );
   }
@@ -2056,11 +2074,11 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
       justifyContent: "center", padding: "2rem 1rem",
     }}>
       <div style={{ fontFamily: "Playfair Display, serif", fontSize: "2rem", color: "#1a0a10", fontWeight: 500, letterSpacing: "-0.02em", marginBottom: "0.4rem" }}>
-        Decode
+        Decifra
       </div>
 
       <p style={{ fontSize: "0.72rem", color: "#aaa", marginBottom: "1.75rem", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-        A product of{" "}
+        Um produto da{" "}
         <a href="https://femhealth.science" target="_blank" rel="noopener noreferrer"
            style={{ color: "#8B1A4A", textDecoration: "none", fontWeight: 600 }}>
           FemHealth.Science
@@ -2072,24 +2090,24 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
         color: "#1a0a10", textAlign: "center", maxWidth: "480px",
         lineHeight: 1.25, margin: "0 0 0.4rem",
       }}>
-        Decode your health.
+        Decifre sua saúde.
       </h1>
       <p style={{ fontFamily: "Playfair Display, serif", fontSize: "clamp(1.2rem, 3vw, 1.6rem)", color: "#8B1A4A", fontStyle: "italic", margin: "0 0 0.85rem", textAlign: "center" }}>
-        Discover answers.
+        Descubra respostas.
       </p>
 
       <p style={{ color: "#666", fontSize: "0.95rem", textAlign: "center", maxWidth: "420px", marginBottom: "2rem", lineHeight: 1.6 }}>
-        Decode extracts biomarkers from your lab report and places them in the context of cycle, fertility, perimenopause and menopause, with evidence-backed female context on every marker.
+        A Decifra extrai os biomarcadores do seu exame e os coloca no contexto do ciclo, da fertilidade, do climatério e da menopausa, com contexto feminino baseado em evidências para cada marcador.
       </p>
 
-      {/* Email */}
+      {/* E-mail */}
       <div style={{ width: "100%", maxWidth: "360px", marginBottom: "2rem" }}>
         <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#555", marginBottom: "0.4rem" }}>
-          Your email
+          Seu e-mail
         </label>
         <input
           type="email"
-          placeholder="you@example.com"
+          placeholder="voce@exemplo.com"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setErr(""); }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -2136,7 +2154,7 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
                 <div style={{
                   fontSize: "0.65rem", fontWeight: 700, color: "#8B1A4A",
                   textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.35rem",
-                }}>Most popular</div>
+                }}>Mais escolhido</div>
               )}
               <div style={{ fontFamily: "Playfair Display, serif", fontSize: "1rem", fontWeight: 700, color: "#1a0a10", marginBottom: "0.2rem" }}>{p.label}</div>
               <div style={{ display: "flex", alignItems: "baseline", gap: "0.25rem", marginBottom: "0.75rem" }}>
@@ -2175,11 +2193,11 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
           boxShadow: "0 4px 16px rgba(139,26,74,0.2)",
         }}
       >
-        {loading ? "One moment…" : (plans.find((p) => p.id === plan)?.cta || "Get started")}
+        {loading ? "Um instante…" : (plans.find((p) => p.id === plan)?.cta || "Começar")}
       </button>
 
       <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#aaa", textAlign: "center" }}>
-        No credit card required for the free plan · Cancel anytime
+        Sem cartão de crédito no plano gratuito · Cancele quando quiser
       </p>
 
       {/* GDPR consent */}
@@ -2187,18 +2205,18 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
         <input type="checkbox" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErr(""); }}
           style={{ marginTop: "3px", accentColor: "#8B1A4A", flexShrink: 0 }}/>
         <span style={{ fontSize: "0.75rem", color: "#888", lineHeight: 1.5 }}>
-          I agree to the{" "}
-          <button onClick={(e) => { e.preventDefault(); onPrivacy(); }} style={{ background: "none", border: "none", color: "#8B1A4A", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}>Privacy Policy</button>.
-          {" "}Decode stores only your email and subscription tier. No lab data is stored.
+          Concordo com a{" "}
+          <button onClick={(e) => { e.preventDefault(); onPrivacy(); }} style={{ background: "none", border: "none", color: "#8B1A4A", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}>Política de Privacidade</button>.
+          {" "}A Decifra armazena apenas seu e-mail e o plano da assinatura. Nenhum dado de exame é guardado.
         </span>
       </label>
 
       {done && (
         <div style={{ marginTop: "1.25rem", background: "#fdf6fa", border: "1px solid #e4a5c7", borderRadius: "0.75rem", padding: "1rem 1.25rem", maxWidth: "360px", textAlign: "center" }}>
           <div style={{ fontSize: "1.5rem", marginBottom: "0.35rem" }}>✓</div>
-          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "1rem", color: "#8B1A4A", fontWeight: 700, marginBottom: "0.25rem" }}>You&rsquo;re in</div>
-          <p style={{ fontSize: "0.8rem", color: "#666", margin: "0 0 0.75rem" }}>Your free account is active. One decode per month, no credit card needed.</p>
-          <button onClick={onBack} style={{ background: "#8B1A4A", color: "#fff", border: "none", borderRadius: "0.5rem", padding: "0.6rem 1.25rem", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer" }}>Go to home</button>
+          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "1rem", color: "#8B1A4A", fontWeight: 700, marginBottom: "0.25rem" }}>Tudo certo</div>
+          <p style={{ fontSize: "0.8rem", color: "#666", margin: "0 0 0.75rem" }}>Sua conta gratuita está ativa. Uma decifração por mês, sem cartão de crédito.</p>
+          <button onClick={onBack} style={{ background: "#8B1A4A", color: "#fff", border: "none", borderRadius: "0.5rem", padding: "0.6rem 1.25rem", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer" }}>Ir para o início</button>
         </div>
       )}
 
@@ -2206,18 +2224,18 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
         <>
           <button onClick={() => { setMode("signin"); setErr(""); }}
             style={{ marginTop: "1rem", background: "none", border: "none", color: "#8B1A4A", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>
-            Already have an account? Sign in
+            Já tem uma conta? Entrar
           </button>
           <button onClick={onBack}
             style={{ marginTop: "0.5rem", background: "none", border: "none", color: "#aaa", fontSize: "0.78rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>
-            Back to home
+            Voltar para o início
           </button>
         </>
       )}
 
       <p style={{ marginTop: "1.5rem", fontSize: "0.7rem", color: "#ccc", textAlign: "center" }}>
-        Made by <a href="https://luana.systems" style={{ color: "#bbb" }}>luana.systems</a> ·
-        Applying <a href="https://momops.org" style={{ color: "#bbb" }}>MomOps</a> lenses
+        Feito por <a href="https://luana.systems" style={{ color: "#bbb" }}>luana.systems</a> ·
+        Com as lentes do <a href="https://momops.org" style={{ color: "#bbb" }}>MomOps</a>
       </p>
     </div>
   );
@@ -2318,9 +2336,9 @@ function PreviewCard() {
     <div className="preview">
       <div className="preview-chrome"><span className="preview-dot"/><span className="preview-path">decifra · prévia dos resultados</span></div>
       <div className="preview-body">
-        <div className="preview-row"><div className="preview-label">Ferritina</div><div className="preview-value">21 <span className="u">ng/mL</span></div><div className="preview-range">15 – 150</div><StatusBadge status="low-normal" compact /></div>
-        <div className="preview-row"><div className="preview-label">Vitamina D</div><div className="preview-value">27 <span className="u">ng/mL</span></div><div className="preview-range">30 – 100</div><StatusBadge status="below range" compact /></div>
-        <div className="preview-row"><div className="preview-label">TSH</div><div className="preview-value">3,4 <span className="u">mUI/L</span></div><div className="preview-range">0,4 – 4,0</div><StatusBadge status="within range" compact /></div>
+        <div className="preview-row"><div className="preview-label">Ferritina</div><div className="preview-value">21 <span className="u">ng/mL</span></div><div className="preview-range">15 a 150</div><StatusBadge status="low-normal" compact /></div>
+        <div className="preview-row"><div className="preview-label">Vitamina D</div><div className="preview-value">27 <span className="u">ng/mL</span></div><div className="preview-range">30 a 100</div><StatusBadge status="below range" compact /></div>
+        <div className="preview-row"><div className="preview-label">TSH</div><div className="preview-value">3,4 <span className="u">mUI/L</span></div><div className="preview-range">0,4 a 4,0</div><StatusBadge status="within range" compact /></div>
         <div className="preview-note"><span className="preview-note-label">Contexto feminino</span>Mulheres que menstruam perdem ferro mensalmente. A ferritina costuma baixar antes da hemoglobina cair.</div>
       </div>
     </div>
@@ -2333,7 +2351,10 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
   const [text, setText] = useState("");
   const [name, setName] = useState("");
   const [uploadHint, setUploadHint] = useState("");
+  const [images, setImages] = useState([]); // [{ data: "<base64>", media_type: "image/jpeg", name: "..." }]
   const fileRef = useRef(null);
+  const MAX_IMAGES = 5;
+  const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB raw
 
   const extractPdfText = async (file) => {
     const pdfjs = window.pdfjsLib;
@@ -2368,29 +2389,98 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
     }
   };
 
+  const readImageAsBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = (e) => {
+      const url = typeof e.target.result === "string" ? e.target.result : "";
+      const comma = url.indexOf(",");
+      resolve(comma === -1 ? url : url.slice(comma + 1));
+    };
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+
+  const handleFiles = async (fileList) => {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+
+    // HEIC friendly error before anything else.
+    const heic = files.find((f) => /\.heic$/i.test(f.name) || /^image\/heic/i.test(f.type || ""));
+    if (heic) {
+      setUploadHint("iPhones podem enviar fotos no formato HEIC. Converta para JPG na galeria antes de enviar, ou tire a foto novamente com a câmera do app Câmera (que salva em JPG).");
+      return;
+    }
+
+    const imageFiles = files.filter((f) => /\.(jpe?g|png)$/i.test(f.name) || /^image\/(jpe?g|png)/i.test(f.type || ""));
+
+    // Multi-image batch path: all files are images, append to images state.
+    if (imageFiles.length === files.length) {
+      const oversize = imageFiles.find((f) => f.size > MAX_IMAGE_BYTES);
+      if (oversize) {
+        setUploadHint(`Imagem muito grande (${(oversize.size / 1024 / 1024).toFixed(1)} MB). Use fotos de até 10 MB cada.`);
+        return;
+      }
+      const totalAfter = images.length + imageFiles.length;
+      if (totalAfter > MAX_IMAGES) {
+        setUploadHint(`Máximo de ${MAX_IMAGES} imagens por exame. Você já tem ${images.length}, e tentou adicionar ${imageFiles.length}.`);
+        return;
+      }
+      try {
+        const added = await Promise.all(
+          imageFiles.map(async (f) => ({
+            data: await readImageAsBase64(f),
+            media_type: /\.png$/i.test(f.name) ? "image/png" : "image/jpeg",
+            name: f.name,
+          }))
+        );
+        setText(""); // images path is exclusive of text path
+        setImages((prev) => [...prev, ...added]);
+        if (!name) setName(imageFiles[0].name.replace(/\.[^.]+$/, ""));
+        setUploadHint(
+          totalAfter === 1
+            ? "Imagem carregada. Continue para decifrar."
+            : `${totalAfter} imagens carregadas. Continue para decifrar.`
+        );
+      } catch {
+        setUploadHint("Não foi possível ler uma das imagens. Tente novamente.");
+      }
+      return;
+    }
+
+    // Mixed images + non-images is ambiguous; surface a clear error.
+    if (imageFiles.length > 0) {
+      setUploadHint("Envie só fotos do laudo, ou só o arquivo PDF/TXT. Não misture os dois tipos.");
+      return;
+    }
+
+    // Non-image flow falls back to single-file handler (PDF/TXT/CSV/RTF/MD).
+    handleFile(files[0]);
+  };
+
   const handleFile = async (file) => {
     if (!file) return;
     setUploadHint("");
+    setImages([]); // entering text/PDF flow drops any pending images
     setName(file.name.replace(/\.[^.]+$/, ""));
     if (/\.pdf$/i.test(file.name)) {
       try {
         const content = await extractPdfText(file);
         if (!content || content.trim().length < 5) {
           setText("");
-          setUploadHint("This PDF appears scanned/image-only. Copy-paste text from your lab portal, or run OCR first.");
+          setUploadHint("Este PDF parece escaneado ou só com imagens. Copie e cole o texto do portal do laboratório, ou rode um OCR antes.");
           return;
         }
         setText(content);
-        setUploadHint("PDF text extracted. Please quickly review for missing lines before extracting markers.");
+        setUploadHint("Texto do PDF extraído. Revise rapidamente se faltou alguma linha antes de extrair os marcadores.");
       } catch (err) {
         setText("");
-        setUploadHint("Could not read this PDF. Try a text-based PDF, or paste/copy the report text.");
+        setUploadHint("Não foi possível ler este PDF. Tente um PDF com texto selecionável, ou cole o conteúdo do laudo.");
       }
       return;
     }
     if (!/\.(txt|csv|rtf|md)$/i.test(file.name)) {
       setText("");
-      setUploadHint("Use a .txt or .csv export, or paste text from your lab portal. RTF may work if the file is mostly plain text.");
+      setUploadHint("Use um arquivo .txt ou .csv, ou cole o texto do portal do laboratório. RTF pode funcionar se o conteúdo for praticamente texto puro.");
       return;
     }
     const reader = new FileReader();
@@ -2399,14 +2489,14 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
       const trimmed = content.trim();
       if (!trimmed) {
         setText("");
-        setUploadHint("That file had no readable text. Try exporting as plain text or paste from the PDF.");
+        setUploadHint("O arquivo não tinha texto legível. Tente exportar como texto puro ou cole o conteúdo direto do PDF.");
         return;
       }
       setText(content);
     };
     reader.onerror = () => {
       setText("");
-      setUploadHint("Could not read that file. Try a smaller file or paste the text instead.");
+      setUploadHint("Não foi possível ler este arquivo. Tente um arquivo menor ou cole o texto diretamente.");
     };
     reader.readAsText(file);
   };
@@ -2423,11 +2513,11 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
   if (stage === "done") return <ExtractionComplete count={extracted.length} onReview={onReview} />;
   if (stage === "error") return (
     <div className="page complete"><div className="card complete-card">
-      <div className="eyebrow" style={{color:"#7A2E2E"}}>Extraction failed</div>
-      <h1 className="h1">We couldn&rsquo;t parse that report</h1>
-      <p className="sub">The extraction engine returned an error. Your text wasn&rsquo;t saved. Try again, or paste the text directly.</p>
+      <div className="eyebrow" style={{color:"#7A2E2E"}}>Extração falhou</div>
+      <h1 className="h1">Não conseguimos ler esse exame</h1>
+      <p className="sub">O motor de extração retornou um erro. Seu texto não foi salvo. Tente de novo, ou cole o conteúdo direto.</p>
       {errorMsg && <pre className="marker-source" style={{marginTop:16, textAlign:"left"}}>{errorMsg}</pre>}
-      <div style={{marginTop:24}}><button className="btn btn-primary" onClick={onRetry}>Try again</button></div>
+      <div style={{marginTop:24}}><button className="btn btn-primary" onClick={onRetry}>Tentar de novo</button></div>
     </div></div>
   );
 
@@ -2484,8 +2574,8 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
                   </p>
                 )}
                 <div className="row-between tab-actions">
-                  <button type="button" className="btn btn-ghost small" onClick={() => { setText(SAMPLE_REPORT); setName("Exame laboratorial exemplo 2026-04-11"); }}>Carregar exame de exemplo</button>
-                  <button type="button" className="btn btn-primary" disabled={!text.trim()} onClick={() => onStart(text, name || "Exame sem nome")}>Continuar para decifrar <IcArrowRight size={15} color="#fff"/></button>
+                  <button type="button" className="btn btn-ghost small" onClick={() => { setText(SAMPLE_REPORT); setImages([]); setName("Exame laboratorial exemplo 2026-04-11"); }}>Carregar exame de exemplo</button>
+                  <button type="button" className="btn btn-primary" disabled={!text.trim()} onClick={() => onStart({ text, images: [] }, name || "Exame sem nome")}>Continuar para decifrar <IcArrowRight size={15} color="#fff"/></button>
                 </div>
               </div>
             )}
@@ -2504,25 +2594,41 @@ function Decode({ stage, errorMsg, extracted, reportText, onStart, onReview, onR
                   onClick={() => fileRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag"); }}
                   onDragLeave={(e) => e.currentTarget.classList.remove("drag")}
-                  onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("drag"); handleFile(e.dataTransfer.files?.[0]); }}
+                  onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("drag"); handleFiles(e.dataTransfer.files); }}
                 >
                   <img src="/illustrations/dropzone-bg.png" alt="" className="dropzone-bg" aria-hidden="true"/>
                   <div className="dropzone-content">
                     <div className="drop-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="var(--primary)" fillOpacity=".08"/><path d="M16 9v11" stroke="var(--primary)" strokeWidth="1.6" strokeLinecap="round"/><path d="M11 13.5l5-5 5 5" stroke="var(--primary)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M8 22v1.5a1.5 1.5 0 001.5 1.5h13a1.5 1.5 0 001.5-1.5V22" stroke="var(--primary)" strokeWidth="1.6" strokeLinecap="round"/></svg></div>
-                    <div className="drop-title">Arraste e solte seu arquivo aqui</div>
-                    <div className="drop-sub">PDF, TXT ou CSV (máx. 50 MB)</div>
+                    <div className="drop-title">Arraste e solte seu(s) arquivo(s) aqui</div>
+                    <div className="drop-sub">PDF, JPG, PNG, TXT ou CSV (máx. 10 MB por arquivo)</div>
                   </div>
-                  <input ref={fileRef} type="file" accept=".pdf,.txt,.csv,.rtf,.md" onChange={(e) => handleFile(e.target.files?.[0])} style={{display: "none"}} aria-hidden="true" />
+                  <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.txt,.csv,.rtf,.md" onChange={(e) => handleFiles(e.target.files)} style={{display: "none"}} aria-hidden="true" />
                 </div>
                 <div className="drop-notes">
                   <span className="drop-note"><span className="drop-note-dot" aria-hidden="true"/>PDFs de texto são lidos automaticamente.</span>
-                  <span className="drop-note"><span className="drop-note-dot" aria-hidden="true"/>PDFs digitalizados/imagem usam OCR.</span>
+                  <span className="drop-note"><span className="drop-note-dot" aria-hidden="true"/>Fotos do laudo (JPG/PNG) são lidas por visão computacional. Tire fotos nítidas, uma página por foto.</span>
                 </div>
                 {uploadHint && <p className="upload-hint" role="status">{uploadHint}</p>}
-                {text && (<div className="file-meta"><span className="file-meta-name">{name || "Sem nome"}</span><span className="file-meta-size">{(text.length/1024).toFixed(1)} KB</span><span className="chip">Pronto</span></div>)}
+                {text && images.length === 0 && (<div className="file-meta"><span className="file-meta-name">{name || "Sem nome"}</span><span className="file-meta-size">{(text.length/1024).toFixed(1)} KB</span><span className="chip">Pronto</span></div>)}
+                {images.length > 0 && (
+                  <div className="file-meta" style={{ flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                    {images.map((img, i) => (
+                      <span key={i} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: "6px", paddingRight: "4px" }}>
+                        <span>{img.name.length > 22 ? img.name.slice(0, 20) + "…" : img.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remover ${img.name}`}
+                          onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                          style={{ background: "none", border: "none", color: "var(--ink-3)", cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: "0 2px" }}
+                        >×</button>
+                      </span>
+                    ))}
+                    <span className="file-meta-size">{images.length}/{MAX_IMAGES}</span>
+                  </div>
+                )}
                 <div className="row-between tab-actions">
-                  <button type="button" className="btn btn-ghost small" onClick={() => { setText(SAMPLE_REPORT); setName("Exame laboratorial exemplo 2026-04-11"); }}>Carregar exame de exemplo</button>
-                  <button type="button" className="btn btn-primary" disabled={!text.trim()} onClick={() => onStart(text, name || "Exame sem nome")}>Continuar para decifrar <IcArrowRight size={15} color="#fff"/></button>
+                  <button type="button" className="btn btn-ghost small" onClick={() => { setText(SAMPLE_REPORT); setImages([]); setName("Exame laboratorial exemplo 2026-04-11"); }}>Carregar exame de exemplo</button>
+                  <button type="button" className="btn btn-primary" disabled={!text.trim() && images.length === 0} onClick={() => onStart({ text, images }, name || "Exame sem nome")}>Continuar para decifrar <IcArrowRight size={15} color="#fff"/></button>
                 </div>
               </div>
             )}
@@ -2692,8 +2798,8 @@ function Review({ reportName, setReportName, confirmed, setConfirmed, onConfirm,
                 </div>
                 <div className="col-marker"><div className="marker-n">{m.marker}</div></div>
                 <div className="col-val mono">{m.value}</div>
-                <div className="col-unit mono">{m.unit || "—"}</div>
-                <div className="col-range mono">{m.reference_range || "—"}</div>
+                <div className="col-unit mono">{m.unit || "–"}</div>
+                <div className="col-range mono">{m.reference_range || "–"}</div>
                 <div className="col-conf"><ConfBadge level={m.confidence}/></div>
                 <div className="col-expand">
                   {hasDetail && (
@@ -3040,10 +3146,10 @@ function Results({ reportName, confirmed, notFound, userContext, onDecodeAnother
     return (
       <div className="page results empty">
         <div className="card empty-card">
-          <div className="eyebrow">No report yet</div>
-          <h1 className="h1">Start by adding a lab report</h1>
-          <p className="sub">Upload or paste your results to see them interpreted through the lens of female biology.</p>
-          <div style={{marginTop:24}}><button className="btn btn-primary" onClick={onDecodeAnother}>Decode a report</button></div>
+          <div className="eyebrow">Nenhum exame ainda</div>
+          <h1 className="h1">Comece adicionando um laudo laboratorial</h1>
+          <p className="sub">Envie ou cole seus resultados para vê-los interpretados pela lente da fisiologia feminina.</p>
+          <div style={{marginTop:24}}><button className="btn btn-primary" onClick={onDecodeAnother}>Decifrar um exame</button></div>
         </div>
       </div>
     );
@@ -3223,7 +3329,7 @@ function downloadJSON(name, confirmed, notFound) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = `decode-${name.replace(/\s+/g, "_")}.json`;
+  a.href = url; a.download = `decifra-${name.replace(/\s+/g, "_")}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -3665,92 +3771,92 @@ function AbsentCard({ name }) {
 // ---------- Clinical panels data ----------
 const CLINICAL_PANELS = [
   {
-    id: "fertile", icon: "🌸", label: "Fertile years", ages: "18–40",
-    summary: "Cycle health, energy, mood, hair, immunity.",
-    context: "The most common findings in reproductive-age women are iron deficiency (ferritin low well before haemoglobin drops), subclinical thyroid dysfunction, vitamin D deficiency, and progesterone insufficiency in the luteal phase. These four alone explain the majority of PMS, fatigue, hair shedding, and cycle irregularity. Standard panels frequently miss ferritin, Free T3, and anti-TPO.",
+    id: "fertile", icon: "🌸", label: "Anos férteis", ages: "18 a 40",
+    summary: "Saúde do ciclo, energia, humor, cabelo, imunidade.",
+    context: "Os achados mais comuns em mulheres em idade reprodutiva são deficiência de ferro (ferritina baixa bem antes da hemoglobina cair), disfunção tireoidiana subclínica, deficiência de vitamina D e insuficiência de progesterona na fase lútea. Esses quatro sozinhos explicam a maioria dos casos de TPM, fadiga, queda de cabelo e irregularidade do ciclo. Painéis padrão frequentemente não incluem ferritina, T3 livre e Anti-TPO.",
     markers: ["TSH", "FREE T4", "FREE T3", "ANTI-TPO", "FERRITIN", "IRON", "HEMOGLOBIN", "VITAMIN D", "VITAMIN B12", "FOLATE", "MAGNESIUM", "ZINC", "ESTRADIOL", "PROGESTERONE", "FSH", "LH", "PROLACTIN", "HSCRP"],
     watch: [
-      "Ferritin below 50 ng/mL causes hair shedding even when haemoglobin is still normal",
-      "TSH between 2.5–4.0 mIU/L can be symptomatic for many women despite being technically 'in range'",
-      "Progesterone on day 21 below 3 ng/mL suggests the cycle was anovulatory",
-      "Anti-TPO positive with normal TSH: Hashimoto's in early stage — monitor every 6–12 months",
+      "Ferritina abaixo de 50 ng/mL pode causar queda de cabelo mesmo com hemoglobina ainda normal",
+      "TSH entre 2,5 e 4,0 mUI/L pode ser sintomático para muitas mulheres, ainda que tecnicamente 'dentro da faixa'",
+      "Progesterona no dia 21 abaixo de 3 ng/mL sugere ciclo anovulatório",
+      "Anti-TPO positivo com TSH normal pode indicar Hashimoto em fase inicial. Vale acompanhar a cada 6 a 12 meses",
     ],
-    missing: "Anti-TPO, Free T3, Magnesium, Zinc, Fasting insulin — rarely ordered but frequently relevant",
+    missing: "Anti-TPO, T3 livre, Magnésio, Zinco e Insulina em jejum. Raramente pedidos, mas frequentemente relevantes.",
     color: "#8B1A4A",
   },
   {
-    id: "pcos", icon: "⚡", label: "PCOS", ages: "Any reproductive age",
-    summary: "Androgen excess, insulin resistance, irregular cycles, anovulation.",
-    context: "PCOS is the most common endocrine disorder in women of reproductive age, affecting 8–13% globally. The diagnostic criteria require two of three: irregular cycles, clinical or biochemical hyperandrogenism, and polycystic ovarian morphology. Critically, 70–80% of women with PCOS have insulin resistance — even lean women. The metabolic markers (fasting insulin, HOMA-IR, triglycerides:HDL ratio) are as important as the hormone panel, yet are the most frequently omitted from standard testing.",
+    id: "pcos", icon: "⚡", label: "SOP", ages: "Qualquer idade reprodutiva",
+    summary: "Excesso de andrógenos, resistência à insulina, ciclos irregulares, anovulação.",
+    context: "A SOP (Síndrome dos Ovários Policísticos) é o distúrbio endócrino mais comum em mulheres em idade reprodutiva, afetando de 8 a 13% globalmente. Os critérios diagnósticos exigem dois de três: ciclos irregulares, hiperandrogenismo clínico ou bioquímico, e morfologia ovariana policística. Importante: 70 a 80% das mulheres com SOP têm resistência à insulina, mesmo as magras. Os marcadores metabólicos (insulina em jejum, HOMA-IR, razão triglicérides/HDL) são tão importantes quanto o painel hormonal, mas são os mais frequentemente omitidos dos exames padrão.",
     markers: ["LH", "FSH", "AMH", "TESTOSTERONE", "SHBG", "DHEA-S", "PROLACTIN", "FASTING GLUCOSE", "FASTING INSULIN", "HOMA-IR", "HBA1C", "TRIGLYCERIDES", "HDL", "HSCRP", "VITAMIN D", "TSH", "ANTI-TPO"],
     watch: [
-      "LH:FSH ratio greater than 2:1 on cycle days 2–4 supports PCOS diagnosis",
-      "AMH above 4–5 ng/mL is strongly associated with PCOS, not just high ovarian reserve",
-      "Low SHBG amplifies free testosterone even when total testosterone is borderline",
-      "Fasting insulin above 10–12 μIU/mL with normal glucose is the earliest metabolic signal",
-      "Triglycerides:HDL ratio above 2.5 is a strong surrogate for insulin resistance",
+      "Razão LH/FSH maior que 2:1 nos dias 2 a 4 do ciclo apoia a hipótese de SOP",
+      "HAM acima de 4 a 5 ng/mL está fortemente associado à SOP, não apenas a reserva ovariana alta",
+      "SHBG baixa amplifica a testosterona livre mesmo quando a testosterona total está no limite",
+      "Insulina em jejum acima de 10 a 12 µUI/mL com glicose normal costuma ser o sinal metabólico mais precoce",
+      "Razão triglicérides/HDL acima de 2,5 é um forte indício de resistência à insulina",
     ],
-    missing: "Fasting insulin and HOMA-IR are almost never included in standard panels but are the most clinically important metabolic markers in PCOS",
+    missing: "Insulina em jejum e HOMA-IR quase nunca entram nos painéis padrão, mas são os marcadores metabólicos clinicamente mais importantes na SOP.",
     color: "#6B2E6B",
   },
   {
-    id: "endo", icon: "🔴", label: "Endometriosis", ages: "Reproductive to perimenopausal",
-    summary: "Chronic pelvic pain, dysmenorrhoea, inflammation, subfertility.",
-    context: "Endometriosis affects 1 in 10 women and takes an average of 7–10 years to diagnose. It is primarily a disease of oestrogen-driven inflammation. There is no definitive blood test — diagnosis is surgical — but a pattern of elevated hsCRP, low ferritin (from heavy blood loss), raised CA-125, and low vitamin D is clinically suggestive. Endometriosis frequently co-occurs with adenomyosis, PCOS, and autoimmune thyroid disease.",
+    id: "endo", icon: "🔴", label: "Endometriose", ages: "Idade reprodutiva ao climatério",
+    summary: "Dor pélvica crônica, dismenorreia, inflamação, subfertilidade.",
+    context: "A endometriose afeta 1 em cada 10 mulheres e leva em média de 7 a 10 anos para ser identificada. É primariamente uma doença de inflamação dirigida por estrogênio. Não existe exame de sangue definitivo, a confirmação é cirúrgica, mas um padrão de PCR-us elevada, ferritina baixa (por sangramento intenso), CA-125 elevado e vitamina D baixa é clinicamente sugestivo. A endometriose costuma coexistir com adenomiose, SOP e doença tireoidiana autoimune.",
     markers: ["CA-125", "HSCRP", "FERRITIN", "HEMOGLOBIN", "MCV", "ESTRADIOL", "PROGESTERONE", "VITAMIN D", "OMEGA-3 INDEX", "MAGNESIUM", "TSH", "ANTI-TPO"],
     watch: [
-      "CA-125 above 35 U/mL in a symptomatic woman warrants further investigation — but normal CA-125 does not exclude endometriosis",
-      "Iron deficiency anaemia from heavy menstrual loss is extremely common; ferritin is the early marker",
-      "Progesterone deficiency (low luteal phase) is common and may worsen endometrial lesion growth",
-      "Low vitamin D is significantly associated with endometriosis severity",
+      "CA-125 acima de 35 U/mL em mulher sintomática merece investigação adicional. CA-125 normal, porém, não exclui endometriose.",
+      "Anemia ferropriva por sangramento menstrual intenso é extremamente comum. A ferritina é o marcador precoce.",
+      "Deficiência de progesterona (fase lútea baixa) é comum e pode piorar o crescimento das lesões endometriais",
+      "Vitamina D baixa está significativamente associada à gravidade da endometriose",
     ],
-    missing: "CA-125, hsCRP, and Omega-3 index are rarely included in standard panels but directly relevant to endometriosis monitoring",
+    missing: "CA-125, PCR-us e Índice de Ômega-3 raramente entram nos painéis padrão, mas são diretamente relevantes para o acompanhamento da endometriose.",
     color: "#B0552B",
   },
   {
-    id: "fertility", icon: "🥚", label: "Fertility investigation", ages: "Typically 25–42",
-    summary: "Ovarian reserve, ovulation confirmation, thyroid-fertility link.",
-    context: "Female fertility investigation rests on four pillars: ovarian reserve (AMH, FSH day 3), ovulation (progesterone day 21), structural factors (ultrasound), and systemic factors (thyroid, vitamin D, immunity). AMH is now the gold-standard ovarian reserve marker and is not cycle-dependent. Thyroid dysfunction is the most common reversible cause of ovulatory infertility — Anti-TPO should be tested in every woman with difficulty conceiving, regardless of TSH.",
+    id: "fertility", icon: "🥚", label: "Investigação de fertilidade", ages: "Geralmente 25 a 42",
+    summary: "Reserva ovariana, confirmação de ovulação, ligação tireoide e fertilidade.",
+    context: "A investigação de fertilidade feminina apoia-se em quatro pilares: reserva ovariana (HAM, FSH no dia 3), ovulação (progesterona no dia 21), fatores estruturais (ultrassonografia) e fatores sistêmicos (tireoide, vitamina D, imunidade). O HAM é hoje o marcador padrão-ouro de reserva ovariana e não depende da fase do ciclo. A disfunção tireoidiana é a causa reversível mais comum de infertilidade ovulatória. Vale solicitar Anti-TPO em toda mulher com dificuldade para engravidar, independentemente do TSH.",
     markers: ["AMH", "FSH", "ESTRADIOL", "LH", "PROGESTERONE", "PROLACTIN", "TSH", "FREE T4", "ANTI-TPO", "VITAMIN D", "FOLATE", "VITAMIN B12", "HOMOCYSTEINE", "HSCRP", "FASTING GLUCOSE", "FASTING INSULIN"],
     watch: [
-      "AMH below 1.0 ng/mL suggests diminished ovarian reserve; below 0.5 ng/mL is significantly reduced",
-      "FSH on day 3 above 10 mIU/mL suggests diminished reserve; above 15 mIU/mL is clinically significant",
-      "Progesterone on day 21 below 3 ng/mL: likely anovulatory cycle. Above 10 ng/mL: robust ovulation",
-      "TSH above 2.5 mIU/mL in women trying to conceive: consider optimising thyroid function",
-      "Anti-TPO positive: associated with reduced IVF success and elevated miscarriage risk, even with normal TSH",
-      "Vitamin D below 30 ng/mL: associated with poorer IVF outcomes and early pregnancy loss",
+      "HAM abaixo de 1,0 ng/mL sugere reserva ovariana diminuída. Abaixo de 0,5 ng/mL é significativamente reduzida.",
+      "FSH no dia 3 acima de 10 mUI/mL sugere reserva diminuída. Acima de 15 mUI/mL é clinicamente significativo.",
+      "Progesterona no dia 21 abaixo de 3 ng/mL costuma indicar ciclo anovulatório. Acima de 10 ng/mL sugere ovulação robusta.",
+      "TSH acima de 2,5 mUI/mL em mulheres tentando engravidar: considere otimizar a função tireoidiana",
+      "Anti-TPO positivo está associado a menor sucesso na FIV e maior risco de perda gestacional, mesmo com TSH normal",
+      "Vitamina D abaixo de 30 ng/mL associa-se a piores resultados na FIV e a perda gestacional precoce",
     ],
-    missing: "Anti-TPO, Homocysteine, and Fasting insulin are frequently omitted but directly relevant to fertility outcomes",
+    missing: "Anti-TPO, Homocisteína e Insulina em jejum são frequentemente omitidos, mas diretamente relevantes para o resultado da fertilidade.",
     color: "#2E5D4F",
   },
   {
-    id: "peri", icon: "🌊", label: "Perimenopause", ages: "Typically 40–52",
-    summary: "Hormonal variability, vasomotor symptoms, metabolic shift, bone and cardiovascular risk.",
-    context: "Perimenopause is defined by variable ovarian function before the final menstrual period, and can last 4–10 years. FSH becomes the most reliable early marker — rising and fluctuating above 10 mIU/mL. Oestradiol swings erratically before declining. The key clinical challenge is that standard panels may appear 'normal' on many days; pattern and trend matter more than single readings. Metabolic risk — insulin resistance, dyslipidaemia, and inflammation — rises sharply in this phase even without weight gain.",
+    id: "peri", icon: "🌊", label: "Climatério", ages: "Geralmente 40 a 52",
+    summary: "Variabilidade hormonal, sintomas vasomotores, mudança metabólica, risco ósseo e cardiovascular.",
+    context: "O climatério é definido pela função ovariana variável antes da última menstruação, e pode durar de 4 a 10 anos. O FSH torna-se o marcador inicial mais confiável, subindo e oscilando acima de 10 mUI/mL. O estradiol oscila de forma errática antes de cair. O desafio clínico é que painéis padrão podem parecer 'normais' em muitos dias. O padrão e a tendência importam mais do que medições isoladas. O risco metabólico (resistência à insulina, dislipidemia, inflamação) sobe acentuadamente nessa fase, mesmo sem ganho de peso.",
     markers: ["FSH", "ESTRADIOL", "LH", "AMH", "PROGESTERONE", "TSH", "FREE T4", "ANTI-TPO", "TESTOSTERONE", "SHBG", "CORTISOL", "VITAMIN D", "CALCIUM", "ALP", "TOTAL CHOLESTEROL", "LDL", "HDL", "TRIGLYCERIDES", "HBA1C", "HSCRP", "HOMOCYSTEINE", "FERRITIN", "VITAMIN B12", "MAGNESIUM"],
     watch: [
-      "FSH above 10 mIU/mL on two separate tests (ideally cycle days 2–5): perimenopause likely",
-      "AMH near zero or undetectable: late perimenopause, final years before menopause",
-      "Oestradiol swings — very high on some tests, low on others — are characteristic of perimenopause and do not indicate 'normal' oestrogen status",
-      "LDL rises significantly in the years around the final menstrual period — cardiovascular risk assessment is essential",
-      "Rising fasting glucose or triglycerides alongside declining HDL: metabolic syndrome emerging",
+      "FSH acima de 10 mUI/mL em dois exames separados (idealmente nos dias 2 a 5 do ciclo) sugere climatério",
+      "HAM próximo de zero ou indetectável indica climatério tardio, anos finais antes da menopausa",
+      "Oscilações de estradiol (muito alto em alguns exames, baixo em outros) são características do climatério e não indicam estrogênio 'normal'",
+      "LDL sobe significativamente nos anos ao redor da última menstruação. A avaliação de risco cardiovascular é essencial.",
+      "Glicose em jejum ou triglicérides em alta com HDL em queda costumam indicar síndrome metabólica emergente",
     ],
-    missing: "Homocysteine, hsCRP, and a full lipid panel are frequently omitted in perimenopausal testing but directly relevant to cardiovascular risk",
+    missing: "Homocisteína, PCR-us e perfil lipídico completo são frequentemente omitidos no rastreio do climatério, mas diretamente relevantes para o risco cardiovascular.",
     color: "#1F3A5F",
   },
   {
-    id: "meno", icon: "🌙", label: "Menopause", ages: "Typically 51+",
-    summary: "Oestrogen deficiency, cardiovascular, bone density, cognition, metabolic.",
-    context: "Menopause is confirmed after 12 consecutive months of amenorrhoea. In the absence of hormone replacement therapy, oestrogen falls to very low levels and the systemic consequences are extensive: accelerated bone loss, sharply rising LDL, increasing visceral adiposity, and elevated cardiovascular risk. FSH above 40 mIU/mL with oestradiol below 20 pg/mL confirms the diagnosis. Testosterone also declines (it was already falling through perimenopause), contributing to reduced energy, libido, and lean mass.",
+    id: "meno", icon: "🌙", label: "Menopausa", ages: "Geralmente 51 anos ou mais",
+    summary: "Deficiência de estrogênio, cardiovascular, densidade óssea, cognição, metabolismo.",
+    context: "A menopausa é confirmada após 12 meses consecutivos de amenorreia. Na ausência de terapia de reposição hormonal, o estrogênio cai a níveis muito baixos e as consequências sistêmicas são amplas: perda óssea acelerada, aumento acentuado de LDL, aumento da adiposidade visceral e risco cardiovascular elevado. FSH acima de 40 mUI/mL com estradiol abaixo de 20 pg/mL é o padrão laboratorial da menopausa. A testosterona também declina (já vinha caindo no climatério), contribuindo para queda de energia, libido e massa magra.",
     markers: ["FSH", "ESTRADIOL", "LH", "TESTOSTERONE", "SHBG", "TSH", "FREE T4", "VITAMIN D", "CALCIUM", "ALP", "PHOSPHORUS", "TOTAL CHOLESTEROL", "LDL", "HDL", "TRIGLYCERIDES", "HBA1C", "FASTING GLUCOSE", "HSCRP", "HOMOCYSTEINE", "CORTISOL", "VITAMIN B12", "MAGNESIUM"],
     watch: [
-      "FSH above 40 mIU/mL and oestradiol below 20 pg/mL: diagnostic of menopause",
-      "LDL rise of 10–15% is common in the 2–3 years after the final menstrual period",
-      "Vitamin D below 50 ng/mL (125 nmol/L) accelerates bone loss — optimising Vitamin D is first-line bone protection",
-      "Triglycerides often rise at menopause even without dietary change — oestrogen normally lowers hepatic VLDL production",
-      "Elevated homocysteine with low B12 or folate: independent cardiovascular risk factor rising in menopause",
+      "FSH acima de 40 mUI/mL com estradiol abaixo de 20 pg/mL é o padrão laboratorial consistente com menopausa",
+      "Aumento de LDL de 10 a 15% é comum nos 2 a 3 anos após a última menstruação",
+      "Vitamina D abaixo de 50 ng/mL (125 nmol/L) acelera a perda óssea. Otimizar a vitamina D é primeira linha de proteção óssea.",
+      "Triglicérides costumam subir na menopausa mesmo sem mudança alimentar. O estrogênio normalmente reduz a produção hepática de VLDL.",
+      "Homocisteína elevada com B12 ou folato baixos é fator independente de risco cardiovascular que sobe na menopausa",
     ],
-    missing: "Homocysteine, ALP (bone-specific), and a full lipid panel are frequently omitted but essential for menopausal health monitoring",
+    missing: "Homocisteína, FA (fosfatase alcalina específica óssea) e perfil lipídico completo são frequentemente omitidos, mas essenciais para o acompanhamento da saúde na menopausa.",
     color: "#4A1A4A",
   },
 ];
@@ -3761,16 +3867,16 @@ function MarkersPage() {
   const [openPanel, setOpenPanel] = useState(null);
 
   const groups = {
-    "Thyroid": ["TSH", "FREE T4", "FREE T3", "ANTI-TPO", "ANTI-TG", "REVERSE T3"],
-    "Reproductive hormones": ["ESTRADIOL", "PROGESTERONE", "FSH", "LH", "AMH", "PROLACTIN"],
-    "Androgens": ["TESTOSTERONE", "SHBG", "DHEA-S"],
-    "Metabolic": ["HBA1C", "FASTING GLUCOSE", "FASTING INSULIN", "HOMA-IR", "TOTAL CHOLESTEROL", "LDL", "HDL", "TRIGLYCERIDES"],
-    "Inflammation": ["HSCRP", "CRP"],
-    "Iron & haematology": ["FERRITIN", "IRON", "HEMOGLOBIN", "HAEMATOCRIT", "MCV"],
-    "Vitamins & minerals": ["VITAMIN D", "VITAMIN B12", "FOLATE", "VITAMIN B6", "MAGNESIUM", "ZINC", "CALCIUM", "SELENIUM"],
-    "Bone": ["ALP", "PHOSPHORUS"],
-    "Reproductive-specific": ["CA-125", "HOMOCYSTEINE", "OMEGA-3 INDEX"],
-    "Stress": ["CORTISOL"],
+    "Tireoide": ["TSH", "FREE T4", "FREE T3", "ANTI-TPO", "ANTI-TG", "REVERSE T3"],
+    "Hormônios reprodutivos": ["ESTRADIOL", "PROGESTERONE", "FSH", "LH", "AMH", "PROLACTIN"],
+    "Andrógenos": ["TESTOSTERONE", "SHBG", "DHEA-S"],
+    "Metabolismo": ["HBA1C", "FASTING GLUCOSE", "FASTING INSULIN", "HOMA-IR", "TOTAL CHOLESTEROL", "LDL", "HDL", "TRIGLYCERIDES"],
+    "Inflamação": ["HSCRP", "CRP"],
+    "Ferro e hematologia": ["FERRITIN", "IRON", "HEMOGLOBIN", "HAEMATOCRIT", "MCV"],
+    "Vitaminas e minerais": ["VITAMIN D", "VITAMIN B12", "FOLATE", "VITAMIN B6", "MAGNESIUM", "ZINC", "CALCIUM", "SELENIUM"],
+    "Saúde óssea": ["ALP", "PHOSPHORUS"],
+    "Específicos reprodutivos": ["CA-125", "HOMOCYSTEINE", "OMEGA-3 INDEX"],
+    "Estresse": ["CORTISOL"],
   };
 
   const filter = (n) => !q || n.toLowerCase().includes(q.toLowerCase()) ||
@@ -3780,13 +3886,13 @@ function MarkersPage() {
   return (
     <div className="page markers-page">
       <div className="page-head">
-        <div className="eyebrow">Clinical reference</div>
-        <h1 className="h1">Markers guide</h1>
-        <p className="sub">What each marker measures, what it means for women at different life stages, and which conditions it helps identify. This guide does not show your values — see <b>Results</b> for that.</p>
+        <div className="eyebrow">Referência clínica</div>
+        <h1 className="h1">Guia de marcadores</h1>
+        <p className="sub">O que cada marcador mede, o que significa para mulheres em diferentes fases da vida, e quais condições ajuda a identificar. Este guia não mostra seus valores. Veja seus valores em <b>Resultados</b>.</p>
 
         {/* Tab selector */}
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "1.25rem" }}>
-          {[["phases", "By life phase and condition"], ["library", "Full marker library"]].map(([id, label]) => (
+          {[["phases", "Por fase da vida e condição"], ["library", "Biblioteca completa de marcadores"]].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               padding: "0.45rem 1rem", borderRadius: "999px", fontSize: "0.85rem", fontWeight: 600,
               background: tab === id ? "var(--primary)" : "transparent",
@@ -3802,7 +3908,7 @@ function MarkersPage() {
       {tab === "phases" && (
         <div>
           <p style={{ color: "var(--ink-2)", fontSize: "0.9rem", lineHeight: 1.65, marginBottom: "2rem", maxWidth: "680px" }}>
-            The same marker tells a different clinical story at 25, 42, and 55. Below are the six most important clinical contexts in women&rsquo;s health — each with the markers that matter most, what to watch for, and what is most often missing from standard panels.
+            O mesmo marcador conta uma história clínica diferente aos 25, aos 42 e aos 55. Abaixo estão os seis contextos clínicos mais importantes na saúde da mulher, cada um com os marcadores que mais importam, o que observar, e o que costuma faltar nos painéis padrão.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {CLINICAL_PANELS.map((panel) => {
@@ -3839,7 +3945,7 @@ function MarkersPage() {
                       {/* Key markers */}
                       <div style={{ marginBottom: "1.25rem" }}>
                         <div style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink-3)", marginBottom: "0.6rem" }}>
-                          Key markers for this phase
+                          Marcadores principais desta fase
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                           {panel.markers.map((m) => (
@@ -3856,7 +3962,7 @@ function MarkersPage() {
                       {/* What to watch */}
                       <div style={{ marginBottom: "1.25rem" }}>
                         <div style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink-3)", marginBottom: "0.6rem" }}>
-                          What to watch for
+                          O que observar
                         </div>
                         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                           {panel.watch.map((w) => (
@@ -3876,7 +3982,7 @@ function MarkersPage() {
                       }}>
                         <span style={{ flexShrink: 0, fontWeight: 700 }}>⚠</span>
                         <div>
-                          <b>Often missing from standard panels:</b> {panel.missing}
+                          <b>Frequentemente ausente dos painéis padrão:</b> {panel.missing}
                         </div>
                       </div>
                     </div>
@@ -3893,7 +3999,7 @@ function MarkersPage() {
         <div>
           <input
             className="text-input search"
-            placeholder="Search 45+ markers…"
+            placeholder="Buscar entre mais de 45 marcadores…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{ marginBottom: "1.5rem" }}
@@ -3912,10 +4018,10 @@ function MarkersPage() {
                       <div key={n} className="card ref-card">
                         <div className="ref-name">{n}</div>
                         <div className="ref-measures">{info.measures}</div>
-                        {info.female_context && <div className="ref-ctx"><span className="ref-ctx-l">Women&rsquo;s context</span>{info.female_context}</div>}
-                        {info.low && <div style={{ marginTop: "0.5rem", fontSize: "0.78rem" }}><span style={{ color: "#1F3A5F", fontWeight: 600 }}>Low: </span><span style={{ color: "var(--ink-2)" }}>{info.low}</span></div>}
-                        {info.high && <div style={{ marginTop: "0.3rem", fontSize: "0.78rem" }}><span style={{ color: "#8B1A4A", fontWeight: 600 }}>High: </span><span style={{ color: "var(--ink-2)" }}>{info.high}</span></div>}
-                        {info.evidence && <div className="ref-evidence" style={{ marginTop: "0.5rem" }}>Evidence strength: <b>{info.evidence}</b></div>}
+                        {info.female_context && <div className="ref-ctx"><span className="ref-ctx-l">Contexto feminino</span>{info.female_context}</div>}
+                        {info.low && <div style={{ marginTop: "0.5rem", fontSize: "0.78rem" }}><span style={{ color: "#1F3A5F", fontWeight: 600 }}>Baixo: </span><span style={{ color: "var(--ink-2)" }}>{info.low}</span></div>}
+                        {info.high && <div style={{ marginTop: "0.3rem", fontSize: "0.78rem" }}><span style={{ color: "#8B1A4A", fontWeight: 600 }}>Alto: </span><span style={{ color: "var(--ink-2)" }}>{info.high}</span></div>}
+                        {info.evidence && <div className="ref-evidence" style={{ marginTop: "0.5rem" }}>Força da evidência: <b>{info.evidence}</b></div>}
                       </div>
                     );
                   })}
@@ -3934,9 +4040,9 @@ function SciencePage() {
   return (
     <div className="page science-page">
       <div className="page-head">
-        <div className="eyebrow">Method · Transparency</div>
-        <h1 className="h1">How Decode works</h1>
-        <p className="sub">What the technology does, what it is not allowed to do, and where its limits are.</p>
+        <div className="eyebrow">Método · Transparência</div>
+        <h1 className="h1">Como a Decifra funciona</h1>
+        <p className="sub">O que a tecnologia faz, o que ela não pode fazer, e onde estão os limites.</p>
       </div>
 
       <div className="science-grid">
@@ -3947,9 +4053,9 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="6" width="20" height="16" rx="2" stroke="var(--primary)" strokeWidth="1.5"/><path d="M8 10h12M8 14h8M8 18h5" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round"/><circle cx="22" cy="8" r="4" fill="var(--surface)" stroke="var(--primary)" strokeWidth="1.5"/><path d="M20.5 8l1 1 2-2" stroke="var(--primary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Step 1: Extraction</summary>
-            <p>When you upload or paste a lab report, the text is processed by an AI-powered extraction engine running on a secure server. Your API credentials are never sent to the browser. The engine reads every biomarker present in the text and returns values verbatim — nothing is rounded, estimated, or inferred.</p>
-            <p className="small" style={{marginTop:8}}>Every extracted result includes the original text snippet it was read from. You can verify any value against your source document before interpretation begins.</p>
+            <summary className="h3">Passo 1: Extração</summary>
+            <p>Quando você envia ou cola um laudo laboratorial, o texto é processado por um motor de extração com IA em servidor seguro. Suas credenciais de API nunca chegam ao navegador. O motor lê cada biomarcador presente no texto e devolve os valores literalmente. Nada é arredondado, estimado ou inferido.</p>
+            <p className="small" style={{marginTop:8}}>Cada resultado extraído inclui o trecho original do texto de onde foi lido. Você pode conferir cada valor contra o seu laudo de origem antes de a interpretação começar.</p>
           </details>
         </article>
 
@@ -3959,8 +4065,8 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 4l8 3v7c0 5-3.5 8.5-8 10C6 22 3 18.5 3 14V7l8-3h3z" stroke="var(--primary)" strokeWidth="1.5" strokeLinejoin="round"/><path d="M9.5 14l3 3 6-6" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Reliability by design</summary>
-            <p>The extraction pipeline is built with redundancy. If the primary AI service is temporarily unavailable, a rule-based fallback can still read common markers from your text. In every case, the same guarantee applies: only values that are explicitly readable in your text are reported.</p>
+            <summary className="h3">Confiabilidade desenhada</summary>
+            <p>O pipeline de extração foi construído com redundância. Se o serviço primário de IA estiver temporariamente indisponível, uma camada de regras consegue ler marcadores comuns do seu texto. Em qualquer cenário, a mesma garantia vale: só são reportados valores explicitamente legíveis no seu texto.</p>
           </details>
         </article>
 
@@ -3970,9 +4076,9 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="5" y="5" width="18" height="18" rx="2" stroke="var(--primary)" strokeWidth="1.5"/><path d="M9 14l3 3 7-7" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Step 2: You review</summary>
-            <p>Before any interpretation is shown, every extracted row appears in a review table. Each row is read-only — you can include or exclude it. The source text snippet is shown alongside each value so you can confirm what was read.</p>
-            <p className="small" style={{marginTop:8}}>Nothing is interpreted until you confirm the extraction.</p>
+            <summary className="h3">Passo 2: Você revisa</summary>
+            <p>Antes de qualquer interpretação aparecer, cada linha extraída entra em uma tabela de revisão. Cada linha é somente leitura. Você pode incluir ou excluir. O trecho-fonte do texto aparece ao lado de cada valor para você confirmar o que foi lido.</p>
+            <p className="small" style={{marginTop:8}}>Nada é interpretado até você confirmar a extração.</p>
           </details>
         </article>
 
@@ -3982,9 +4088,9 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9" stroke="var(--primary)" strokeWidth="1.5"/><path d="M14 10v5l3 2" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="14" cy="10" r="1" fill="var(--primary)"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Step 3: Interpretation</summary>
-            <p>Each confirmed marker receives structured clinical context: what it measures, why it matters specifically for women across the lifespan — cycle, fertility, perimenopause, menopause — and what out-of-range states are associated with.</p>
-            <p className="small" style={{marginTop:8}}>No diagnosis is generated. No conclusions are drawn. Context only — authored with care to be accurate, non-alarmist, and female-specific.</p>
+            <summary className="h3">Passo 3: Interpretação</summary>
+            <p>Cada marcador confirmado recebe contexto clínico estruturado: o que mede, por que importa especificamente para mulheres ao longo da vida (ciclo, fertilidade, climatério, menopausa), e o que valores fora da faixa costumam representar.</p>
+            <p className="small" style={{marginTop:8}}>Nenhum diagnóstico é gerado. Nenhuma conclusão é tirada. Apenas contexto, escrito com cuidado para ser preciso, sem alarmismo, e focado na fisiologia feminina.</p>
           </details>
         </article>
 
@@ -3994,11 +4100,11 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M5 20l5-8 4 5 3-4 6 7" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="5" cy="20" r="1.5" fill="var(--primary)"/><circle cx="10" cy="12" r="1.5" fill="var(--primary)"/><circle cx="14" cy="17" r="1.5" fill="var(--primary)"/><circle cx="17" cy="13" r="1.5" fill="var(--primary)"/><circle cx="23" cy="20" r="1.5" fill="var(--primary)"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Confidence</summary>
+            <summary className="h3">Confiança</summary>
             <ul className="science-list">
-              <li><b>High:</b> marker, value, unit, and reference range all clearly present in your report.</li>
-              <li><b>Medium:</b> marker and value are unambiguous; unit or range formatting is slightly imperfect.</li>
-              <li><b>Low:</b> the text is partially degraded but the value is still directly readable.</li>
+              <li><b>Alta:</b> marcador, valor, unidade e faixa de referência todos claramente presentes no seu laudo.</li>
+              <li><b>Média:</b> marcador e valor inequívocos. Unidade ou formatação da faixa um pouco imperfeitas.</li>
+              <li><b>Baixa:</b> o texto está parcialmente degradado mas o valor ainda é legível diretamente.</li>
             </ul>
           </details>
         </article>
@@ -4009,12 +4115,12 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="9" stroke="var(--primary)" strokeWidth="1.5"/><path d="M10 10l8 8M18 10l-8 8" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Four things the system will not do</summary>
+            <summary className="h3">Quatro coisas que o sistema não faz</summary>
             <ul className="science-list">
-              <li>Invent a marker that isn&rsquo;t in your report.</li>
-              <li>Round, modify, or convert any value.</li>
-              <li>Carry data between sessions or reports.</li>
-              <li>Diagnose, suggest a diagnosis, or make clinical conclusions.</li>
+              <li>Inventar um marcador que não está no seu laudo.</li>
+              <li>Arredondar, modificar ou converter qualquer valor.</li>
+              <li>Levar dados entre sessões ou entre laudos diferentes.</li>
+              <li>Diagnosticar, sugerir um diagnóstico ou tirar conclusões clínicas.</li>
             </ul>
           </details>
         </article>
@@ -4025,13 +4131,13 @@ function SciencePage() {
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 5v2M14 21v2M5 14H3M25 14h-2M7.75 7.75l-1.4-1.4M21.65 21.65l-1.4-1.4M7.75 20.25l-1.4 1.4M21.65 6.35l-1.4 1.4" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round"/><circle cx="14" cy="14" r="5" stroke="var(--primary)" strokeWidth="1.5"/></svg>
           </div>
           <details className="science-details" open>
-            <summary className="h3">Limits</summary>
-            <p><b>Decode is an educational interface. It is not a medical device, not a diagnostic tool, and not a substitute for clinical care.</b></p>
+            <summary className="h3">Limites</summary>
+            <p><b>A Decifra é uma interface educacional. Não é um dispositivo médico, não é uma ferramenta diagnóstica e não substitui consulta com profissional habilitado pelo CFM/CRM.</b></p>
             <ul className="science-list" style={{marginTop:8}}>
-              <li>Extraction accuracy depends on the quality of your source text. A clean, structured PDF yields high-confidence results. A low-resolution photo or handwritten form may not.</li>
-              <li>Reference ranges are taken directly from your report. They reflect your laboratory&rsquo;s thresholds — they are not set or modified by Decode.</li>
-              <li>Clinical context reflects published literature for women generally. It does not account for your individual history, medications, or comorbidities.</li>
-              <li>Any out-of-range or unexpected result should be discussed with a qualified clinician before any action is taken.</li>
+              <li>A precisão da extração depende da qualidade do texto-fonte. Um PDF limpo e estruturado gera resultados de alta confiança. Uma foto de baixa resolução ou um laudo manuscrito, talvez não.</li>
+              <li>As faixas de referência vêm diretamente do seu laudo. Refletem os limites do seu laboratório. A Decifra não define nem altera essas faixas.</li>
+              <li>O contexto clínico reflete a literatura publicada para mulheres em geral. Não considera seu histórico individual, suas medicações ou comorbidades.</li>
+              <li>Qualquer valor fora da faixa ou inesperado deve ser conversado com profissional qualificado antes de qualquer ação.</li>
             </ul>
           </details>
         </article>
@@ -4044,7 +4150,7 @@ function SciencePage() {
 // ---------- Device carousel with dot navigation ----------
 function DeviceCarousel({ label, screens, Phone }) {
   const [active, setActive] = React.useState(0);
-  const labels = { home: "Home", upload: "Upload", results: "Results", marker: "Marker detail" };
+  const labels = { home: "Início", upload: "Enviar", results: "Resultados", marker: "Detalhe do marcador" };
   return (
     <div>
       <div className="device-group-h">{label}</div>
@@ -4072,14 +4178,14 @@ function MobilePage() {
   return (
     <div className="page mobile-page">
       <div className="page-head">
-        <div className="eyebrow">Coming soon · Android &amp; iOS</div>
-        <h1 className="h1">Decode on mobile</h1>
-        <p className="sub">The same strict extraction, same clinical context, built for one-handed phone use. Native apps in development.</p>
+        <div className="eyebrow">Em breve · Android e iOS</div>
+        <h1 className="h1">Decifra no celular</h1>
+        <p className="sub">A mesma extração rigorosa e o mesmo contexto clínico, desenhados para usar com uma mão só no celular. Apps nativos em desenvolvimento.</p>
       </div>
 
       <div className="device-lab">
         <DeviceCarousel label="Android · Material 3" screens={screens} Phone={AndroidPhone} />
-        <DeviceCarousel label="iOS · Native"          screens={screens} Phone={IOSPhone}     />
+        <DeviceCarousel label="iOS · Nativo"          screens={screens} Phone={IOSPhone}     />
       </div>
 
       <div className="mobile-pwa-strip">
