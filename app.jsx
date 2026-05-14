@@ -931,7 +931,7 @@ function UpgradeModal({ onClose }) {
             marginBottom: "0.6rem", transition: "background 0.2s",
           }}
         >
-          {loading ? "Redirecionando ao Stripe…" : "Assinar Pro · €7,99/mês" /* TODO: BRL pricing pending Stripe BR setup */}
+          {loading ? "Redirecionando ao Stripe…" : "Assinar Pro · R$ 29,90/mês"}
         </button>
 
         <button
@@ -945,7 +945,7 @@ function UpgradeModal({ onClose }) {
             marginBottom: "1rem",
           }}
         >
-          Plano anual · €59/ano (economize €37) {/* TODO: BRL pricing pending Stripe BR setup */}
+          Plano anual · R$ 249/ano (economize R$ 109,80)
         </button>
 
         <button
@@ -1709,19 +1709,18 @@ function PreviewGate({ extracted, onUnlock, prefillEmail, limitHit }) {
   };
 
   // plans shown. If limit already hit, free plan is removed.
-  // TODO: BRL pricing pending Stripe BR setup. Prices left in EUR placeholder.
   const plans = [
     ...(!limitHit ? [{
-      id: "free", label: "Grátis", price: "€0", cycle: "/ mês",
+      id: "free", label: "Grátis", price: "R$ 0", cycle: "/ mês",
       note: "1 decifração por mês",
       cta: "Liberar laudo grátis",
     }] : []),
-    { id: "monthly", label: "Pro", price: "€7,99", cycle: "/ mês",
+    { id: "monthly", label: "Pro", price: "R$ 29,90", cycle: "/ mês",
       note: "Decifrações ilimitadas · todos os marcadores · prioridade",
-      cta: "Liberar com Pro · €7,99/mês", highlight: true },
-    { id: "annual", label: "Pro Anual", price: "€59", cycle: "/ ano",
-      note: "Melhor custo. 2 meses grátis.",
-      cta: "Liberar com Pro · €59/ano", badge: "Economize €37" },
+      cta: "Liberar com Pro · R$ 29,90/mês", highlight: true },
+    { id: "annual", label: "Pro Anual", price: "R$ 249", cycle: "/ ano",
+      note: "Melhor custo. 2 meses grátis. Em até 12x no cartão.",
+      cta: "Liberar com Pro · R$ 249/ano", badge: "Economize R$ 109" },
   ];
 
   return (
@@ -2008,12 +2007,11 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
     if (plan === "free") setDone(true);
   };
 
-  // TODO: BRL pricing pending Stripe BR setup. Prices left in EUR placeholder.
   const plans = [
     {
       id: "free",
       label: "Grátis",
-      price: "€0",
+      price: "R$ 0",
       cycle: "para sempre",
       perks: ["1 decifração por mês", "Contexto feminino em cada marcador", "18 biomarcadores interpretados"],
       cta: "Começar grátis",
@@ -2022,20 +2020,20 @@ function SignUp({ onSignUp, onBack, onPrivacy }) {
     {
       id: "monthly",
       label: "Pro Mensal",
-      price: "€7,99",
+      price: "R$ 29,90",
       cycle: "/ mês",
       perks: ["Decifrações ilimitadas", "Contexto feminino em cada marcador", "Mais de 18 biomarcadores interpretados", "Download em PDF e JSON", "Suporte prioritário"],
-      cta: "Assinar Pro · €7,99/mês",
+      cta: "Assinar Pro · R$ 29,90/mês",
       highlight: true,
     },
     {
       id: "annual",
       label: "Pro Anual",
-      price: "€59",
+      price: "R$ 249",
       cycle: "/ ano",
-      badge: "Economize €37",
-      perks: ["Tudo do Pro Mensal", "Melhor custo. 2 meses grátis.", "Suporte prioritário"],
-      cta: "Assinar Pro · €59/ano",
+      badge: "Economize R$ 109",
+      perks: ["Tudo do Pro Mensal", "Em até 12x no cartão sem juros", "2 meses grátis vs. mensal", "Suporte prioritário"],
+      cta: "Assinar Pro · R$ 249/ano",
       highlight: false,
     },
   ];
